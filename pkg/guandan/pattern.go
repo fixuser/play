@@ -86,18 +86,13 @@ func (p *Pattern) Detect(trump Rank) {
 	}
 	p.SameSuit = isFlush
 
-	// 4. 辅助判断：是否为炸弹 (普通牌只有一种点数，或者没有普通牌)
+	// 4. 辅助判断：是否为炸弹 (普通牌只有一种点数)
+	// 万能牌最多2张，不可能单独构成炸弹(>=4张)
 	isBomb := false
 	var bombRank Rank
-	if len(rankCounts) <= 1 {
-		if len(rankCounts) == 1 {
-			for r := range rankCounts {
-				bombRank = r
-			}
-		} else {
-			// 全是万能牌，通常视为最大的炸弹，这里暂定为 A (或者 JokerBig? 但 JokerBig 不能组成炸弹，除了四大天王)
-			// 假设全是红桃级牌，视为级牌炸弹
-			bombRank = trump
+	if len(rankCounts) == 1 {
+		for r := range rankCounts {
+			bombRank = r
 		}
 		if p.Length >= 4 {
 			isBomb = true

@@ -50,9 +50,7 @@ func (handCards Cards) CanBeat(targetPattern *Pattern, trump Rank) bool {
 				}
 			}
 			// 纯万能牌同花顺? 通常万能牌可以配成任意花色
-			if wildCount >= 5 {
-				return true
-			}
+			// 万能牌最多2张，不可能组成5张同花顺
 		case 5: // >5张炸弹
 			if searchBomb(rankCounts, wildCount, 6, 0, trump) {
 				return true
@@ -82,10 +80,7 @@ func (handCards Cards) CanBeat(targetPattern *Pattern, trump Rank) bool {
 			}
 		}
 		// 纯万能牌同花顺 (如果 targetPattern 是同花顺，纯万能牌可以组成更大的同花顺吗？)
-		// 假设纯万能牌是最大的同花顺
-		if wildCount >= 5 && targetPattern.MainPoint < uint8(RankLevel) { // 假设 RankLevel 是最大
-			return true
-		}
+		// 万能牌最多2张，不可能组成5张同花顺
 	case 3: // 5张炸弹
 		if searchBomb(rankCounts, wildCount, 5, targetPattern.MainPoint, trump) {
 			return true
