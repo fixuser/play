@@ -45,9 +45,11 @@ func (handCards Cards) SearchBeat(target Cards, trump Rank) Cards {
 		if res := searchBomb(cardsMap, wildCards, targetPattern.Length, targetPattern.MainPoint, trump); res != nil {
 			return res
 		}
-		// 先找张数更多的
-		if res := searchBomb(cardsMap, wildCards, targetPattern.Length+1, 0, trump); res != nil {
-			return res
+		// 先找张数更多的 (直到8张)
+		for len := targetPattern.Length + 1; len <= 8; len++ {
+			if res := searchBomb(cardsMap, wildCards, len, 0, trump); res != nil {
+				return res
+			}
 		}
 	case 4: // 同花顺
 		for _, cards := range suitCardsMap {
@@ -131,8 +133,11 @@ func (handCards Cards) SearchBeat(target Cards, trump Rank) Cards {
 				}
 			}
 		case 5: // >5张炸弹
-			if res := searchBomb(cardsMap, wildCards, 6, 0, trump); res != nil {
-				return res
+			// 搜索 6, 7, 8 张炸弹
+			for len := 6; len <= 8; len++ {
+				if res := searchBomb(cardsMap, wildCards, len, 0, trump); res != nil {
+					return res
+				}
 			}
 		}
 	}
