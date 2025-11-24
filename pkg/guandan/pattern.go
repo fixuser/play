@@ -185,6 +185,7 @@ func NewPattern(cards Cards, trump Rank) (p *Pattern) {
 			p.MainPoint = bombRank.Weight(trump)
 		}
 	}
+	return
 }
 
 // checkSequence 检查是否构成序列
