@@ -19,6 +19,7 @@ const (
 // 三连对、三同连张、顺子、同花顺时，可视作1
 type Pattern struct {
 	Type      PatternType
+	Trump     Rank
 	Cards     Cards
 	MainPoint uint8 // 主要点数（用于比较牌型大小, 当为顺子，三连对的时候返回最大的牌）
 	SubPoint  uint8 // 次要点数（备用）
@@ -26,30 +27,26 @@ type Pattern struct {
 	SameSuit  bool  // 是否为同花
 }
 
-func (cs Cards) Detect(trump Rank) (pattern *Pattern) {
-	pattern = new(Pattern)
-	pattern.Cards = cs
-	pattern.Length = len(cs)
-	if len(cs) <= 0 {
-		return
-	}
-
-	if len(cs) == 4 && cs.IsFourJokers() { // 四大天王
-		pattern.Type = PatternTypeFourJokers
-		return
-	}
-	pattern.Detect(trump)
-	return
+func (cs Cards) Pattern(trump Rank) (pattern *Pattern) {
+	return NewPattern(cs, trump)
 }
 
 // Detect 检测牌型
-func (p *Pattern) Detect(trump Rank) {
+func NewPattern(cards Cards, trump Rank) (p *Pattern) {
+	p = new(Pattern)
 	p.Type = PatternTypeNone
+	p.Trump = trump
+	p.Cards = cards
 	p.MainPoint = 0
 	p.SameSuit = false
 	p.Length = len(p.Cards)
 
 	if p.Length == 0 {
+		return
+	}
+
+	if len(p.Cards) == 4 && p.Cards.HasFourJokers() { // 四大天王
+		p.Type = PatternTypeFourJokers
 		return
 	}
 
@@ -228,7 +225,7 @@ func checkSequence(rankCounts map[Rank]int, wildCount int, length int, width int
 				if i == 0 {
 					r = RankA
 				} else {
-					r = Rank(i + 1) // 1->Rank2, 2->Rank3...
+					r = Rank(i) // 1->Rank2, 2->Rank3...
 				}
 			} else {
 				r = Rank(start + i)

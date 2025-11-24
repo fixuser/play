@@ -65,8 +65,18 @@ func (c Card) IsWild(trump Rank) bool {
 
 type Cards []Card
 
-// IsFourJokers 是否是四大天王
-func (cs Cards) IsFourJokers() bool {
+// HasBigJoker 是否包含指定数量的大王
+func (cs Cards) HasBigJoker(size int) bool {
+	for _, c := range cs {
+		if c.Rank == RankJokerBig {
+			size--
+		}
+	}
+	return size <= 0
+}
+
+// HasFourJokers 是否包含四大天王
+func (cs Cards) HasFourJokers() bool {
 	cntSmall, cntBig := 0, 0
 	for _, c := range cs {
 		switch c.Rank {
