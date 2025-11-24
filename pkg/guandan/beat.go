@@ -490,12 +490,8 @@ func searchSequenceAll(cardsMap map[Rank][]Card, wildCards []Card, length int, w
 
 		for i := 0; i < length; i++ {
 			var r Rank
-			if start == 0 {
-				if i == 0 {
-					r = RankA
-				} else {
-					r = Rank(i)
-				}
+			if start == 0 && i == 0 {
+				r = RankA
 			} else {
 				r = Rank(start + i)
 			}

@@ -222,12 +222,8 @@ func checkSequence(rankCounts map[Rank]int, wildCount int, length int, width int
 
 		for i := 0; i < length; i++ {
 			var r Rank
-			if start == 0 {
-				if i == 0 {
-					r = RankA
-				} else {
-					r = Rank(i) // 1->Rank2, 2->Rank3...
-				}
+			if start == 0 && i == 0 {
+				r = RankA
 			} else {
 				r = Rank(start + i)
 			}
