@@ -183,7 +183,7 @@ func TestPubSubHighLoad(t *testing.T) {
 	// 订阅处理
 	sub, err := ps.Subscribe(ctx, testTopic, func(data map[string]interface{}) {
 		consumeCount.Add(1)
-	}, WithConcurrency(10), WithBatchSize(1))
+	}, WithConcurrency(10), WithBatchSize(10))
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
@@ -237,6 +237,9 @@ func TestPubSubHighLoad(t *testing.T) {
 	testCtx, cancel := context.WithTimeout(ctx, testDuration)
 	defer cancel()
 
+	// 使用独立的 context 进行发布，避免 testCtx 超时影响 Redis 操作
+	publishCtx := context.Background()
+
 	for i := 0; i < publisherCount; i++ {
 		go func(publisherID int) {
 			msgID := 0
@@ -255,7 +258,8 @@ func TestPubSubHighLoad(t *testing.T) {
 						"timestamp":    time.Now().Unix(),
 					}
 
-					err := ps.Publish(testCtx, testTopic, data)
+					// 使用 publishCtx 而不是 testCtx，避免 context deadline exceeded 错误
+					err := ps.Publish(publishCtx, testTopic, data)
 					if err != nil {
 						continue
 					}

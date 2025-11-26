@@ -52,6 +52,7 @@ type Subscription struct {
 	handler      reflect.Value      // 订阅的函数
 	handlerType  reflect.Type       // 订阅函数的类型
 	concurrency  int                // 并发worker数量
+	batchSize    int                // 每次BLPOP批量获取的消息数量
 	useRecovery  bool               // 是否开启panic recovery
 	dataChan     chan []byte        // 内部数据通道，BLPOP将数据放入此通道
 	stopChan     chan struct{}      // 通知goroutine停止
@@ -97,6 +98,20 @@ func WithConcurrency(c int) Option {
 				s.concurrency = 1
 			} else {
 				s.concurrency = c
+			}
+		}
+	}
+}
+
+// WithBatchSize 设置每次从Redis批量获取的消息数量
+// 如果 bs <= 0, 则默认为 1（单条获取）
+func WithBatchSize(bs int) Option {
+	return func(o any) {
+		if s, ok := o.(*Subscription); ok {
+			if bs <= 0 {
+				s.batchSize = 1
+			} else {
+				s.batchSize = bs
 			}
 		}
 	}
@@ -227,6 +242,7 @@ func (p *PubSub) Subscribe(ctx context.Context, topic string, fn any, opts ...Op
 		handler:     fnVal,
 		handlerType: fnVal.Type(),
 		concurrency: 1, // 默认并发为1
+		batchSize:   1, // 默认批量大小为1
 		dataChan:    make(chan []byte, defaultDataChanSize),
 		stopChan:    make(chan struct{}),
 		ctx:         subCtx,
@@ -244,7 +260,7 @@ func (p *PubSub) Subscribe(ctx context.Context, topic string, fn any, opts ...Op
 
 	p.wg.Add(1) // PubSub 等待此 Subscription
 
-	log.Trace().Str("topic", topic).Int("concurrency", s.concurrency).Bool("recovery", s.useRecovery).Msg("new subscription created")
+	log.Trace().Str("topic", topic).Int("concurrency", s.concurrency).Int("batch_size", s.batchSize).Bool("recovery", s.useRecovery).Msg("new subscription created")
 	return &s, nil
 }
 
@@ -283,13 +299,13 @@ func (p *PubSub) Close() error {
 // --- Subscription 方法 ---
 
 // Loop 启动订阅的处理循环
-// 它会启动一个goroutine用于BLPOP，以及N个worker goroutine用于处理消息
+// 它会启动一个goroutine用于BLMPOP，以及N个worker goroutine用于处理消息
 func (s *Subscription) Loop() {
 	log.Trace().Str("topic", s.topic).Msg("subscription loop starting")
 
-	// 启动BLPOP goroutine
-	s.wg.Add(1) // 为了BLPOP goroutine
-	go s.blpopLoop()
+	// 启动BLMPOP goroutine
+	s.wg.Add(1) // 为了BLMPOP goroutine
+	go s.blmpopLoop()
 
 	// 启动worker goroutines
 	for i := 0; i < s.concurrency; i++ {
@@ -299,11 +315,11 @@ func (s *Subscription) Loop() {
 	log.Info().Str("topic", s.topic).Int("workers", s.concurrency).Msg("subscription loop and workers started")
 }
 
-func (s *Subscription) blpopLoop() {
+func (s *Subscription) blmpopLoop() {
 	defer s.wg.Done()
-	defer log.Trace().Str("topic", s.topic).Msg("blpop loop stopped")
+	defer log.Trace().Str("topic", s.topic).Msg("blmpop loop stopped")
 
-	log.Trace().Str("topic", s.topic).Msg("blpop loop started")
+	log.Trace().Str("topic", s.topic).Int("batch_size", s.batchSize).Msg("blmpop loop started")
 	for {
 		select {
 		case <-s.stopChan: // 外部要求停止
@@ -313,44 +329,45 @@ func (s *Subscription) blpopLoop() {
 		case <-s.pubSub.closed: // PubSub 关闭
 			return
 		default:
-			// BLPOP 从 Redis list 中阻塞弹出元素
-			// 返回值是一个 []string，格式为 [keyName, value]
-			results, err := s.pubSub.redisClient.BLPop(s.ctx, blpopTimeout, s.redisKey).Result()
+			// BLMPop 从 Redis list 中批量阻塞弹出元素
+			// 返回值格式: key, values, error
+			key, values, err := s.pubSub.redisClient.BLMPop(s.ctx, blpopTimeout, "left", int64(s.batchSize), s.redisKey).Result()
 			if err != nil {
 				if errors.Is(err, redis.Nil) {
 					continue
 				}
 				if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "context canceled") {
 					// 超时或上下文取消，继续循环检查 stopChan
-					log.Trace().Str("topic", s.topic).Msg("blpop timed out or context canceled, retrying")
+					log.Trace().Str("topic", s.topic).Msg("blmpop timed out or context canceled, retrying")
 					continue
 				}
 				// 其他 Redis 错误
-				log.Error().Err(err).Str("topic", s.topic).Msg("blpop failed")
+				log.Error().Err(err).Str("topic", s.topic).Msg("blmpop failed")
 				// 考虑错误恢复策略，例如指数退避重试或停止订阅
 				// 为简单起见，这里在严重错误时短暂sleep后重试
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			if len(results) == 2 {
-				payload := []byte(results[1]) // results[0] is the key name
-				log.Trace().Str("topic", s.topic).Bytes("payload", payload).Msg("message received from blpop")
-				select {
-				case s.dataChan <- payload:
-					// 成功发送到处理通道
-				case <-s.stopChan:
-					log.Warn().Str("topic", s.topic).Msg("blpop loop stopping, discarding message")
-					return
-				case <-s.ctx.Done():
-					log.Warn().Str("topic", s.topic).Msg("blpop loop context done, discarding message")
-					return
-				case <-s.pubSub.closed:
-					log.Warn().Str("topic", s.topic).Msg("pubsub closed, blpop loop stopping, discarding message")
-					return
+			// 处理批量弹出的消息
+			if len(values) > 0 {
+				log.Trace().Str("topic", s.topic).Str("key", key).Int("batch_count", len(values)).Msg("messages received from blmpop")
+				for _, value := range values {
+					payload := []byte(value)
+					select {
+					case s.dataChan <- payload:
+						// 成功发送到处理通道
+					case <-s.stopChan:
+						log.Warn().Str("topic", s.topic).Msg("blmpop loop stopping, discarding remaining messages")
+						return
+					case <-s.ctx.Done():
+						log.Warn().Str("topic", s.topic).Msg("blmpop loop context done, discarding remaining messages")
+						return
+					case <-s.pubSub.closed:
+						log.Warn().Str("topic", s.topic).Msg("pubsub closed, blmpop loop stopping, discarding remaining messages")
+						return
+					}
 				}
-			} else {
-				log.Warn().Str("topic", s.topic).Int("results_len", len(results)).Msg("blpop returned unexpected result length")
 			}
 		}
 	}
