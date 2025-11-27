@@ -1,0 +1,97 @@
+package token
+
+import (
+	"encoding"
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+)
+
+var _ encoding.BinaryMarshaler = (*Value)(nil)
+var _ encoding.BinaryUnmarshaler = (*Value)(nil)
+
+type Value struct {
+	UserId           int64
+	AccessToken      string
+	RefreshToken     string
+	OsType           string
+	CreatedAt        time.Time
+	TokenExpiredAt   time.Time
+	RefreshExpiredAt time.Time
+	Extras           []byte
+}
+
+// genToken generates a new token string
+// 使用uuid但是去掉分隔符号
+func genToken() string {
+	return strings.ReplaceAll(uuid.New().String(), "-", "")
+}
+
+func NewValue(userId int64) *Value {
+	return &Value{
+		UserId:       userId,
+		AccessToken:  genToken(),
+		RefreshToken: genToken(),
+		CreatedAt:    time.Now(),
+	}
+}
+
+// IsTokenExpired checks if the token is expired
+func (v *Value) IsTokenExpired() bool {
+	if v == nil {
+		return true
+	}
+	return v.TokenExpiredAt.Before(time.Now())
+}
+
+// IsRefreshExpired checks if the refresh token is expired
+func (v *Value) IsRefreshExpired() bool {
+	if v == nil {
+		return true
+	}
+	return v.RefreshExpiredAt.Before(time.Now())
+}
+
+// IsTokenValid checks if the token is valid
+func (v *Value) IsTokenValid(osType string) bool {
+	if v == nil {
+		return false
+	}
+	return !v.IsTokenExpired() && v.AccessToken != "" && v.UserId > 0 && (osType == "" || strings.EqualFold(v.OsType, osType))
+}
+
+// Expired
+func (v *Value) SetExpired() {
+	now := time.Now()
+	if v.TokenExpiredAt.After(now) {
+		v.TokenExpiredAt = now
+	}
+	if v.RefreshExpiredAt.After(now) {
+		v.RefreshExpiredAt = now
+	}
+}
+
+// Get gets the value of the key
+func (v *Value) Get(key string) (value gjson.Result) {
+	return gjson.GetBytes(v.Extras, key)
+}
+
+// Set sets the value of the key
+func (v *Value) Set(key string, value any) (err error) {
+	v.Extras, err = sjson.SetBytes(v.Extras, key, value)
+	return
+}
+
+// MarshalBinary implements the encoding.BinaryMarshaler interface
+func (v *Value) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(v)
+}
+
+// UnmarshalBinary implements the encoding.BinaryUnmarshaler interface
+func (v *Value) UnmarshalBinary(data []byte) (err error) {
+	return json.Unmarshal(data, v)
+}
