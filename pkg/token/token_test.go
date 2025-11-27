@@ -469,8 +469,8 @@ func TestValue_IsTokenValid(t *testing.T) {
 	})
 }
 
-func TestValue_SetExpired(t *testing.T) {
-	t.Run("set expired", func(t *testing.T) {
+func TestValue_Expire(t *testing.T) {
+	t.Run("expire token", func(t *testing.T) {
 		val := NewValue(11001)
 		val.TokenExpiredAt = time.Now().Add(time.Hour)
 		val.RefreshExpiredAt = time.Now().Add(time.Hour * 24)
@@ -478,13 +478,13 @@ func TestValue_SetExpired(t *testing.T) {
 		assert.False(t, val.IsTokenExpired())
 		assert.False(t, val.IsRefreshExpired())
 
-		val.SetExpired()
+		val.Expire()
 
 		assert.True(t, val.IsTokenExpired())
 		assert.True(t, val.IsRefreshExpired())
 	})
 
-	t.Run("set expired on already expired token", func(t *testing.T) {
+	t.Run("expire already expired token", func(t *testing.T) {
 		val := NewValue(11002)
 		val.TokenExpiredAt = time.Now().Add(-time.Hour)
 		val.RefreshExpiredAt = time.Now().Add(-time.Hour)
@@ -492,7 +492,7 @@ func TestValue_SetExpired(t *testing.T) {
 		oldTokenExpire := val.TokenExpiredAt
 		oldRefreshExpire := val.RefreshExpiredAt
 
-		val.SetExpired()
+		val.Expire()
 
 		// 已过期的时间不应该改变
 		assert.Equal(t, oldTokenExpire, val.TokenExpiredAt)

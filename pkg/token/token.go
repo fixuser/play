@@ -62,7 +62,7 @@ func (tk *Token) Set(ctx context.Context, val *Value, opts ...Option) (err error
 	_, err = tk.rdb.Pipelined(ctx, func(pipe redis.Pipeliner) (err error) {
 		// 如果有旧的 token，则让旧 token 记录失效，让refresh token 失效
 		if oldValue.UserId > 0 {
-			oldValue.SetExpired()
+			oldValue.Expire()
 			pipe.HSet(ctx, tk.tokenDataKey, oldValue.AccessToken, &oldValue)
 			pipe.HDel(ctx, tk.refreshTokenKey, oldValue.RefreshToken, val.AccessToken)
 		}
@@ -149,16 +149,9 @@ func (tk *Token) Refresh(ctx context.Context, refreshToken string, opts ...Optio
 	o := *tk.opts
 	o.apply(opts...)
 
-	newVal := NewValue(val.UserId)
-	newVal.Extras = val.Extras
-	newVal.OsType = val.OsType
-	newVal.TokenExpiredAt = newVal.CreatedAt.Add(o.tokenExpires)
-	newVal.RefreshExpiredAt = newVal.CreatedAt.Add(o.refreshExpires)
-	newVal.Set("refreshed_at", time.Now().Unix())
-	newVal.Set("old_access_token", val.AccessToken)
-	newVal.Set("old_refresh_token", refreshToken)
-
-	val.SetExpired()
+	newVal := val.Refresh()
+	newVal.updateExpire(&o)
+	val.Expire()
 
 	_, err = tk.rdb.Pipelined(ctx, func(pipe redis.Pipeliner) (err error) {
 		pipe.HSet(ctx, tk.tokenDataKey, newVal.AccessToken, newVal)

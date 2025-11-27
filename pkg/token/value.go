@@ -40,6 +40,31 @@ func NewValue(userId int64) *Value {
 	}
 }
 
+// Copy creates a copy of the Value
+func (v *Value) Refresh() (newVal *Value) {
+	if v == nil {
+		return nil
+	}
+	newVal = NewValue(v.UserId)
+	newVal.OsType = v.OsType
+	newVal.Extras = v.Extras
+	newVal.Set("refreshed_at", time.Now().Unix())
+	newVal.Set("old_access_token", v.AccessToken)
+	newVal.Set("old_refresh_token", v.RefreshToken)
+	return
+}
+
+// updateExpire sets the token and refresh token expiration based on options
+func (v *Value) updateExpire(o *options) {
+	now := time.Now()
+	if o.tokenExpires > 0 {
+		v.TokenExpiredAt = now.Add(o.tokenExpires)
+	}
+	if o.refreshExpires > 0 {
+		v.RefreshExpiredAt = now.Add(o.refreshExpires)
+	}
+}
+
 // IsTokenExpired checks if the token is expired
 func (v *Value) IsTokenExpired() bool {
 	if v == nil {
@@ -64,8 +89,8 @@ func (v *Value) IsTokenValid(osType string) bool {
 	return !v.IsTokenExpired() && v.AccessToken != "" && v.UserId > 0 && (osType == "" || strings.EqualFold(v.OsType, osType))
 }
 
-// Expired
-func (v *Value) SetExpired() {
+// Expire immediately expires the token and refresh token
+func (v *Value) Expire() {
 	now := time.Now()
 	if v.TokenExpiredAt.After(now) {
 		v.TokenExpiredAt = now
