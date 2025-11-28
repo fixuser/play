@@ -88,7 +88,14 @@ func (tk *Token) Update(ctx context.Context, val *Value, opts ...Option) (err er
 }
 
 // Remove removes the token
-func (tk *Token) Remove(ctx context.Context, token string) (err error) {
+func (tk *Token) Remove(ctx context.Context, userId int64, token string) (err error) {
+	if userId > 0 && token == "" { // 通过 userId 查找 token
+		token = tk.rdb.HGet(ctx, tk.tokenUniqueKey, cast.ToString(userId)).Val()
+		if token == "" {
+			return
+		}
+	}
+
 	val := new(Value)
 	err = tk.rdb.HGet(ctx, tk.tokenDataKey, token).Scan(val)
 	if err != nil {
@@ -105,15 +112,6 @@ func (tk *Token) Remove(ctx context.Context, token string) (err error) {
 		return
 	})
 	return
-}
-
-// RemoveByUserId removes the token by user ID
-func (tk *Token) RemoveByUserId(ctx context.Context, userId int64) (err error) {
-	accessToken := tk.rdb.HGet(ctx, tk.tokenUniqueKey, cast.ToString(userId)).Val()
-	if accessToken == "" {
-		return
-	}
-	return tk.Remove(ctx, accessToken)
 }
 
 // Get gets the token
