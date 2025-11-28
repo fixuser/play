@@ -31,7 +31,7 @@ func TestToken_Set(t *testing.T) {
 
 	t.Run("set new token", func(t *testing.T) {
 		val := NewValue(1001)
-		val.OsType = "web"
+		val.Platform = "web"
 
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
@@ -48,19 +48,19 @@ func TestToken_Set(t *testing.T) {
 		assert.Equal(t, val.RefreshToken, gotVal.RefreshToken)
 	})
 
-	t.Run("set token with same osType should expire old token", func(t *testing.T) {
+	t.Run("set token with same platform should expire old token", func(t *testing.T) {
 		// 第一次设置
 		val1 := NewValue(1002)
-		val1.OsType = "app"
+		val1.Platform = "app"
 		err := tk.Set(ctx, val1)
 		require.NoError(t, err)
 
 		oldToken := val1.AccessToken
 		oldRefreshToken := val1.RefreshToken
 
-		// 第二次设置相同用户和osType
+		// 第二次设置相同用户和platform
 		val2 := NewValue(1002)
-		val2.OsType = "app"
+		val2.Platform = "app"
 		err = tk.Set(ctx, val2)
 		require.NoError(t, err)
 
@@ -81,14 +81,14 @@ func TestToken_Set(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrRefreshTokenNotFound))
 	})
 
-	t.Run("different osType replaces old token", func(t *testing.T) {
+	t.Run("different platform replaces old token", func(t *testing.T) {
 		val1 := NewValue(1003)
-		val1.OsType = "web"
+		val1.Platform = "web"
 		err := tk.Set(ctx, val1)
 		require.NoError(t, err)
 
 		val2 := NewValue(1003)
-		val2.OsType = "app"
+		val2.Platform = "app"
 		err = tk.Set(ctx, val2)
 		require.NoError(t, err)
 
@@ -109,7 +109,7 @@ func TestToken_Get(t *testing.T) {
 
 	t.Run("get existing token", func(t *testing.T) {
 		val := NewValue(2001)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
@@ -117,7 +117,7 @@ func TestToken_Get(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, val.UserId, gotVal.UserId)
 		assert.Equal(t, val.AccessToken, gotVal.AccessToken)
-		assert.Equal(t, val.OsType, gotVal.OsType)
+		assert.Equal(t, val.Platform, gotVal.Platform)
 	})
 
 	t.Run("get non-existing token", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestToken_Refresh(t *testing.T) {
 
 	t.Run("refresh valid token", func(t *testing.T) {
 		val := NewValue(3001)
-		val.OsType = "web"
+		val.Platform = "web"
 		val.Set("custom_field", "test_value")
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestToken_Refresh(t *testing.T) {
 		newVal, err := tk.Refresh(ctx, oldRefreshToken)
 		require.NoError(t, err)
 		assert.Equal(t, val.UserId, newVal.UserId)
-		assert.Equal(t, val.OsType, newVal.OsType) // 检查extras是否保留
+		assert.Equal(t, val.Platform, newVal.Platform) // 检查extras是否保留
 		assert.Equal(t, "test_value", newVal.Get("custom_field").String())
 
 		// 检查刷新记录
@@ -186,7 +186,7 @@ func TestToken_Refresh(t *testing.T) {
 
 	t.Run("refresh with expired refresh token", func(t *testing.T) {
 		val := NewValue(3002)
-		val.OsType = "app"
+		val.Platform = "app"
 		val.CreatedAt = time.Now().Add(-time.Hour * 25) // 超过refresh过期时间
 		val.TokenExpiredAt = val.CreatedAt.Add(time.Hour)
 		val.RefreshExpiredAt = val.CreatedAt.Add(time.Hour * 24)
@@ -209,7 +209,7 @@ func TestToken_Update(t *testing.T) {
 
 	t.Run("update token extends expiration", func(t *testing.T) {
 		val := NewValue(4001)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
@@ -232,7 +232,7 @@ func TestToken_Update(t *testing.T) {
 
 	t.Run("update token near refresh expiration does not extend", func(t *testing.T) {
 		val := NewValue(4002)
-		val.OsType = "web"
+		val.Platform = "web"
 		val.CreatedAt = time.Now().Add(-time.Hour * 23) // 接近refresh过期
 		val.TokenExpiredAt = val.CreatedAt.Add(time.Hour)
 		val.RefreshExpiredAt = val.CreatedAt.Add(time.Hour * 24)
@@ -260,12 +260,12 @@ func TestToken_Remove(t *testing.T) {
 
 	t.Run("remove existing token", func(t *testing.T) {
 		val := NewValue(5001)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
 		// 删除token
-		err = tk.Remove(ctx, val.AccessToken)
+		err = tk.Remove(ctx, 0, val.AccessToken)
 		require.NoError(t, err)
 
 		// token应该不存在
@@ -279,7 +279,7 @@ func TestToken_Remove(t *testing.T) {
 	})
 
 	t.Run("remove non-existing token", func(t *testing.T) {
-		err := tk.Remove(ctx, "non-existing-token")
+		err := tk.Remove(ctx, 0, "non-existing-token")
 		assert.NoError(t, err) // 不应该报错
 	})
 }
@@ -294,12 +294,12 @@ func TestToken_RemoveByUserId(t *testing.T) {
 
 	t.Run("remove token by user id", func(t *testing.T) {
 		val := NewValue(6001)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
 		// 通过用户ID删除token
-		err = tk.RemoveByUserId(ctx, 6001)
+		err = tk.Remove(ctx, 6001, "")
 		require.NoError(t, err)
 
 		// token应该不存在
@@ -309,7 +309,7 @@ func TestToken_RemoveByUserId(t *testing.T) {
 	})
 
 	t.Run("remove non-existing user id", func(t *testing.T) {
-		err := tk.RemoveByUserId(ctx, 9999)
+		err := tk.Remove(ctx, 9999, "")
 		assert.NoError(t, err) // 不应该报错
 	})
 }
@@ -324,7 +324,7 @@ func TestToken_ValueExtras(t *testing.T) {
 
 	t.Run("set and get extras", func(t *testing.T) {
 		val := NewValue(7001)
-		val.OsType = "web"
+		val.Platform = "web"
 
 		// 设置extras
 		err := val.Set("username", "testuser")
@@ -351,7 +351,7 @@ func TestToken_ValueExtras(t *testing.T) {
 
 	t.Run("extras preserved after refresh", func(t *testing.T) {
 		val := NewValue(7002)
-		val.OsType = "web"
+		val.Platform = "web"
 		val.Set("session_id", "abc123")
 		val.Set("device_id", "device456")
 
@@ -376,17 +376,17 @@ func TestToken_Concurrent(t *testing.T) {
 	ctx := context.Background()
 	tk := New(client, WithPrefix("test"))
 
-	t.Run("concurrent set for same user different osType", func(t *testing.T) {
+	t.Run("concurrent set for same user different platform", func(t *testing.T) {
 		done := make(chan bool, 3)
 
-		for i, osType := range []string{"web", "app", "ios"} {
+		for i, platform := range []string{"web", "app", "ios"} {
 			go func(idx int, os string) {
 				val := NewValue(8001)
-				val.OsType = os
+				val.Platform = os
 				err := tk.Set(ctx, val)
 				assert.NoError(t, err)
 				done <- true
-			}(i, osType)
+			}(i, platform)
 		}
 
 		// 等待所有goroutine完成
@@ -407,7 +407,7 @@ func TestToken_Options(t *testing.T) {
 		tk := New(client, WithPrefix("myapp"))
 
 		val := NewValue(9001)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
@@ -430,7 +430,7 @@ func TestToken_Options(t *testing.T) {
 			WithRefreshExpires(time.Hour*48))
 
 		val := NewValue(9002)
-		val.OsType = "web"
+		val.Platform = "web"
 		err := tk.Set(ctx, val)
 		require.NoError(t, err)
 
@@ -446,18 +446,18 @@ func TestToken_Options(t *testing.T) {
 func TestValue_IsTokenValid(t *testing.T) {
 	t.Run("valid token", func(t *testing.T) {
 		val := NewValue(10001)
-		val.OsType = "web"
+		val.Platform = "web"
 		val.TokenExpiredAt = time.Now().Add(time.Hour)
 
 		assert.True(t, val.IsTokenValid("web"))
 		assert.True(t, val.IsTokenValid("Web"))  // 大小写不敏感
-		assert.True(t, val.IsTokenValid(""))     // 空字符串不检查osType
-		assert.False(t, val.IsTokenValid("app")) // 不同osType
+		assert.True(t, val.IsTokenValid(""))     // 空字符串不检查platform
+		assert.False(t, val.IsTokenValid("app")) // 不同platform
 	})
 
 	t.Run("expired token", func(t *testing.T) {
 		val := NewValue(10002)
-		val.OsType = "web"
+		val.Platform = "web"
 		val.TokenExpiredAt = time.Now().Add(-time.Hour)
 
 		assert.False(t, val.IsTokenValid("web"))

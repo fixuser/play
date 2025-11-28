@@ -18,7 +18,7 @@ type Value struct {
 	UserId           int64
 	AccessToken      string
 	RefreshToken     string
-	OsType           string
+	Platform         string // 平台类型
 	CreatedAt        time.Time
 	TokenExpiredAt   time.Time
 	RefreshExpiredAt time.Time
@@ -46,7 +46,7 @@ func (v *Value) Refresh() (newVal *Value) {
 		return nil
 	}
 	newVal = NewValue(v.UserId)
-	newVal.OsType = v.OsType
+	newVal.Platform = v.Platform
 	newVal.Extras = v.Extras
 	newVal.Set("refreshed_at", time.Now().Unix())
 	newVal.Set("old_access_token", v.AccessToken)
@@ -82,11 +82,11 @@ func (v *Value) IsRefreshExpired() bool {
 }
 
 // IsTokenValid checks if the token is valid
-func (v *Value) IsTokenValid(osType string) bool {
+func (v *Value) IsTokenValid(platform string) bool {
 	if v == nil {
 		return false
 	}
-	return !v.IsTokenExpired() && v.AccessToken != "" && v.UserId > 0 && (osType == "" || strings.EqualFold(v.OsType, osType))
+	return !v.IsTokenExpired() && v.AccessToken != "" && v.UserId > 0 && (platform == "" || strings.EqualFold(v.Platform, platform))
 }
 
 // Expire immediately expires the token and refresh token
