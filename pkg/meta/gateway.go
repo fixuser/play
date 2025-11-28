@@ -37,12 +37,12 @@ func MetadataAnnotator(ctx context.Context, req *http.Request) (md metadata.MD) 
 	data[HeaderRequestPath] = req.URL.Path
 	data[HeaderRequestHost] = req.Host
 
-	data[MetaLanguage] = cmp.Or(req.Header.Get("Accept-Language"), req.Header.Get(MetaLanguage))
+	data[MetaLanguage] = cmp.Or(req.Header.Get(MetaLanguage), req.Header.Get("Accept-Language"))
 	data[MetaVersion] = req.Header.Get(MetaVersion)
-	data[MetaPlatform] = req.Header.Get(MetaPlatform)
+	data[MetaPlatform] = cmp.Or(req.Header.Get(MetaPlatform), "pcweb")
 	data[MetaDeviceId] = req.Header.Get(MetaDeviceId)
 
-	// 获取用户登陆令牌
+	// 获取用户登录令牌
 	token := req.Header.Get("Authorization")
 	token = strings.TrimPrefix(token, "Bearer ")
 	if token == "" {
