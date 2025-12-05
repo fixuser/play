@@ -464,3 +464,12 @@ func (p *Pattern) Compare(other *Pattern) int {
 
 	return 0
 }
+
+type Patterns []Pattern
+
+func (ps Patterns) Cards() (all Cards) {
+	for _, p := range ps {
+		all = append(all, p.Cards...)
+	}
+	return
+}

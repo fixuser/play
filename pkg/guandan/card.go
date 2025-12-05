@@ -52,6 +52,11 @@ type Card struct {
 	Suit Suit
 }
 
+// Equal 判断两张牌是否相等
+func (c Card) Equal(other Card) bool {
+	return c.Rank == other.Rank && c.Suit == other.Suit
+}
+
 // NewCard
 func NewCard(rank Rank, suit Suit) Card {
 	return Card{
