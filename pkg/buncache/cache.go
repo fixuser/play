@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand/v2"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -23,7 +24,9 @@ type option[K comparable, V any] func(*CacheManager[K, V])
 
 type CacheManager[K comparable, V any] struct {
 	db           *bun.DB
-	key          string
+	isLoad       atomic.Bool
+	fieldKey     string
+	sqlKey       string
 	size         int
 	interval     time.Duration
 	loadInterval time.Duration
@@ -38,10 +41,10 @@ func WithInterval[K comparable, V any](d time.Duration) option[K, V] {
 	}
 }
 
-// WithKey 设置实体的主键字段名，默认为 "Id"
-func WithKey[K comparable, V any](key string) option[K, V] {
+// WithFieldKey 设置实体的主键字段名，默认为 "Id"
+func WithFieldKey[K comparable, V any](key string) option[K, V] {
 	return func(cm *CacheManager[K, V]) {
-		cm.key = key
+		cm.fieldKey = key
 	}
 }
 
@@ -66,13 +69,13 @@ func New[K comparable, V any](db *bun.DB, opts ...option[K, V]) *CacheManager[K,
 	}
 
 	key := "Id"
-	if len(table.PKs) > 0 {
-		key = table.PKs[0].Name
+	if len(table.PKs) == 1 {
+		key = table.PKs[0].StructField.Name
 	}
 
 	cm := &CacheManager[K, V]{
 		db:        db,
-		key:       key,
+		fieldKey:  key,
 		size:      20000000,
 		modelName: table.Name,
 		interval:  time.Minute*2 + time.Duration(rand.Int64N(60))*time.Second,
@@ -83,13 +86,14 @@ func New[K comparable, V any](db *bun.DB, opts ...option[K, V]) *CacheManager[K,
 
 	found := false
 	for _, field := range table.Fields {
-		if field.Name == cm.key {
+		if field.StructField.Name == cm.fieldKey {
 			found = true
+			cm.sqlKey = field.Name
 			break
 		}
 	}
 	if !found {
-		panic("buncache: specified key field(" + cm.key + ") does not exist in the model")
+		panic("buncache: specified key field(" + cm.fieldKey + ") does not exist in the model")
 	}
 
 	cm.caches = expirable.NewLRU[K, *V](cm.size, nil, cm.interval)
@@ -126,7 +130,7 @@ func (cm *CacheManager[K, V]) buildLoad() func() {
 			}
 
 			// 获取主键值
-			keyVal := reflect.ValueOf(v).FieldByName(cm.key).Interface().(K)
+			keyVal := reflect.ValueOf(v).FieldByName(cm.fieldKey).Interface().(K)
 			vPtr := new(V)
 			*vPtr = v
 			cm.caches.Add(keyVal, vPtr)
@@ -145,6 +149,9 @@ func (cm *CacheManager[K, V]) buildLoad() func() {
 			Int("old_count", oldLen).
 			Int("loaded_count", loadedCount).
 			Msg("buncache: load completed")
+
+		// 标记已加载
+		cm.isLoad.Store(true)
 	}
 }
 
@@ -158,6 +165,7 @@ func (cm *CacheManager[K, V]) loop(loadFunc func()) {
 		ticker := time.NewTicker(cm.loadInterval)
 		defer ticker.Stop()
 
+		loadFunc()
 		for range ticker.C {
 			loadFunc()
 		}
@@ -190,7 +198,7 @@ func (cm *CacheManager[K, V]) buildGet() func(k K) *V {
 		}
 
 		var v2 V
-		err := cm.db.NewSelect().Model(&v2).Where(cm.key+" = ?", k).Scan(ctx)
+		err := cm.db.NewSelect().Model(&v2).Where(cm.sqlKey+" = ?", k).Scan(ctx)
 		if err != nil {
 			// 查询出错或未找到记录，缓存 nil 防止缓存穿透
 			cm.caches.Add(k, nil)
@@ -207,8 +215,17 @@ func (cm *CacheManager[K, V]) buildGet() func(k K) *V {
 // buildGets 构建批量实体缓存获取函数
 // 返回 []*V 切片，保持与输入 ks 相同的长度和顺序
 // 不存在的记录返回 nil
+// 当 isLoad 为 true 且 ks 为空时，返回所有缓存数据
 func (cm *CacheManager[K, V]) buildGets() func(ks ...K) []*V {
 	return func(ks ...K) []*V {
+		// 如果 isLoad 为 true 且 ks 为空，返回所有缓存数据
+		if len(ks) == 0 {
+			if cm.isLoad.Load() {
+				return cm.caches.Values()
+			}
+			return nil
+		}
+
 		ctx := context.Background()
 		result := make([]*V, len(ks))
 		var missingKeys []K
@@ -236,13 +253,13 @@ func (cm *CacheManager[K, V]) buildGets() func(ks ...K) []*V {
 
 		// 第三步：批量查询数据库
 		var vs []V
-		cm.db.NewSelect().Model(&vs).Where(cm.key+" IN (?)", bun.In(missingKeys)).Scan(ctx)
+		cm.db.NewSelect().Model(&vs).Where(cm.sqlKey+" IN (?)", bun.In(missingKeys)).Scan(ctx)
 
 		// 第四步：处理查询结果
 		foundKeys := make(map[K]*V)
 		for _, v := range vs {
 			val := v
-			keyVal := reflect.ValueOf(val).FieldByName(cm.key).Interface().(K)
+			keyVal := reflect.ValueOf(val).FieldByName(cm.fieldKey).Interface().(K)
 			ptrVal := &val
 			cm.caches.Add(keyVal, ptrVal)
 			foundKeys[keyVal] = ptrVal
