@@ -1,6 +1,16 @@
 package guandan
 
-import "time"
+import (
+	"errors"
+	"math"
+	"time"
+)
+
+// 错误定义
+var (
+	ErrGameNotFinished = errors.New("game not finished")
+	ErrNoWinningTeam   = errors.New("no winning team")
+)
 
 type GameRoundStatus int8
 
@@ -59,22 +69,49 @@ func (tr TeamRank) Score() int {
 	}
 }
 
+// IsClimbFailed 判断翻山是否失败
+// 翻山时如果排名是 1,4 则翻山失败
+func (tr TeamRank) IsClimbFailed() bool {
+	return tr.IsWinner() && tr.WinLevel() == 1 // 1,4 排名
+}
+
+// WinningInfo 本局获胜信息
+type WinningInfo struct {
+	WinningTeam  int8        // 获胜队伍 0: 队伍A(玩家0,2), 1: 队伍B(玩家1,3)
+	TeamRanks    [2]TeamRank // 两队的排名情况
+	WinningLevel int         // 本局获胜等级 0: 未结束或未获胜, 1: 普通胜利, 2: 中等胜利, 3: 双上
+	WinningScore int32       // 本局获胜积分
+	WinningCoin  int32       // 本局获胜金币
+	IsClimbing   bool        // 本局是否为翻山获胜
+}
+
 // GameRound 游戏回合信息
 type GameRound struct {
 	Status     GameRoundStatus
-	Players    [4]Player
+	Players    [4]Player   // 玩家
+	MinType    PatternType // 用于计算翻倍的最小牌型
+	MaxTrump   Rank        // 当前游戏中的最高级牌
 	Trump      Rank        // 当前头游在级牌
 	Trumps     [2]Rank     // 当前两队的级牌, 只有打过A的时候才会有值
+	ClimCounts [2]int8     // 当前两队的翻山次数, 翻山三次后失败级牌自动变为Rank2
 	StartedAt  int64       // 游戏开始时间（Unix时间戳，毫秒）
 	FinishedAt int64       // 游戏结束时间（Unix时间戳，毫秒）
 	Rounds     []GameRound // 历史回合记录, 上一局记录在0索引
+	Winning    WinningInfo // 本局获胜信息, 如果游戏未结束则为空
 }
 
 // NewGameRound 创建一个新的游戏回合
-func NewGameRound() *GameRound {
+func NewGameRound(maxTrump Rank, minType PatternType) *GameRound {
 	return &GameRound{
-		Status: GameStatusWaiting,
+		Status:   GameStatusWaiting,
+		MaxTrump: maxTrump,
+		MinType:  minType,
 	}
+}
+
+// IsClimbing 是否在翻山
+func (gr *GameRound) IsClimbing() bool {
+	return gr.Trump == gr.MaxTrump && gr.MaxTrump != RankNone
 }
 
 // IsReady 检查游戏回合是否准备好开始
@@ -170,12 +207,12 @@ func (gr *GameRound) Check() bool {
 	teamBFinished := gr.Players[1].Status == StatusFinished && gr.Players[3].Status == StatusFinished
 
 	if teamAFinished || teamBFinished {
-		// 给未完成的玩家分配名次（末游都是4）
+		// 给未完成的玩家分配名次
 		for i := range gr.Players {
 			player := &gr.Players[i]
 			if player.Status == StatusPlaying {
 				player.Status = StatusFinished
-				player.Rank = 4
+				player.Rank = gr.nextRank()
 				hasNewRank = true
 			}
 		}
@@ -218,7 +255,7 @@ func (gr *GameRound) GetTeams() [2]TeamPlayers {
 
 // GetWinningTeam 获取获胜队伍
 // 返回 0 表示队伍A(玩家0,2)获胜, 1 表示队伍B(玩家1,3)获胜, -1 表示游戏未结束
-func (gr *GameRound) GetWinningTeam() int {
+func (gr *GameRound) GetWinningTeam() int8 {
 	if gr.Status != GameStatusFinished {
 		return -1
 	}
@@ -226,8 +263,173 @@ func (gr *GameRound) GetWinningTeam() int {
 	// 头游所在队伍获胜
 	for i, player := range gr.Players {
 		if player.Rank == 1 {
-			return i % 2 // 0,2 返回0(队伍A), 1,3 返回1(队伍B)
+			return int8(i) % 2 // 0,2 返回0(队伍A), 1,3 返回1(队伍B)
 		}
 	}
 	return -1
+}
+
+// CountPatternType 统计所有玩家打出的 >= minType 的牌型数量
+func (gr *GameRound) CountPatternType(minType PatternType) (count int32) {
+	if minType == PatternTypeNone {
+		return 0
+	}
+	for _, player := range gr.Players {
+		for _, pattern := range player.Played {
+			if pattern.Type >= minType {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// CalcMultiplier 计算翻倍倍数
+// minType: 最小牌型，统计 >= minType 的数量
+// 返回 2^N，N 为符合条件的牌型数量
+func (gr *GameRound) CalcMultiplier(minType PatternType) int32 {
+	count := gr.CountPatternType(minType)
+	if count == 0 {
+		return 1
+	}
+	// 2^N
+	return int32(math.Pow(2, float64(count)))
+}
+
+// Settle 结算函数
+// basePoint: 基础积分
+// baseCoin: 基础金币
+// minType: 用于计算翻倍的最小牌型（如 PatternTypeBomb）
+func (gr *GameRound) Settle(basePoint, baseCoin int32) error {
+	if gr.Status != GameStatusFinished {
+		return ErrGameNotFinished
+	}
+
+	// 获取获胜队伍
+	winningTeam := gr.GetWinningTeam()
+	if winningTeam < 0 {
+		return ErrNoWinningTeam
+	}
+
+	// 获取队伍排名
+	teamRanks := gr.GetTeamRanks()
+
+	// 计算翻倍
+	multiplier := int32(gr.CalcMultiplier(gr.MinType))
+
+	// 获取获胜队伍的积分倍率
+	winTeamRank := teamRanks[winningTeam]
+	scoreMultiplier := int32(winTeamRank.Score()) // 12, 6, 或 3
+
+	// 计算最终积分和金币变化
+	pointChange := basePoint * scoreMultiplier * multiplier / 3 // 除以3是因为 Score 返回的是 3, 6, 12
+	coinChange := baseCoin * scoreMultiplier * multiplier / 3
+
+	// 更新 WinningInfo
+	gr.Winning.WinningTeam = winningTeam
+	gr.Winning.TeamRanks = teamRanks
+	gr.Winning.WinningLevel = winTeamRank.WinLevel()
+	gr.Winning.WinningScore = pointChange
+	gr.Winning.WinningCoin = coinChange
+	// 记录是否翻山成功（在翻山状态且不是1,4排名）
+	gr.Winning.IsClimbing = gr.IsClimbing() && !winTeamRank.IsClimbFailed()
+
+	// 更新玩家信息
+	for i := range gr.Players {
+		player := &gr.Players[i]
+		playerTeam := int8(i % 2) // 0,2 属于队伍0，1,3 属于队伍1
+
+		if playerTeam == winningTeam {
+			// 赢家
+			player.IsWinner = true
+			player.PointChange = pointChange
+			player.CoinChange = coinChange
+		} else {
+			// 输家
+			player.IsWinner = false
+			player.PointChange = -pointChange
+			player.CoinChange = -coinChange
+		}
+	}
+	return nil
+}
+
+// NextRound 准备下一回合
+// 将当前回合保存到历史记录，重置玩家状态，更新级牌
+func (gr *GameRound) NextRound() error {
+	if gr.Status != GameStatusFinished {
+		return ErrGameNotFinished
+	}
+
+	// 获取获胜队伍
+	winningTeam := gr.GetWinningTeam()
+	if winningTeam < 0 {
+		return ErrNoWinningTeam
+	}
+
+	// 保存当前回合到历史记录（插入到最前面）
+	currentRound := *gr
+	currentRound.Rounds = nil // 避免嵌套保存历史记录
+	gr.Rounds = append([]GameRound{currentRound}, gr.Rounds...)
+
+	// 根据获胜等级计算升级数
+	winTeamRank := gr.Winning.TeamRanks[winningTeam]
+	levelUp := Rank(winTeamRank.WinLevel()) // 双上升3级，中等升2级，普通升1级
+
+	// 检查翻山情况
+	isClimbing := gr.IsClimbing()
+	climbFailed := isClimbing && winTeamRank.IsClimbFailed()
+
+	if climbFailed {
+		// 翻山失败，增加失败次数
+		gr.ClimCounts[winningTeam]++
+
+		// 如果翻山失败次数 >= 3，级牌重置为 Rank2
+		if gr.ClimCounts[winningTeam] >= 3 {
+			gr.Trumps[winningTeam] = Rank2
+			gr.ClimCounts[winningTeam] = 0 // 重置失败次数
+		}
+		// 翻山失败不升级，级牌保持不变
+	} else {
+		// 翻山成功或非翻山情况，正常升级
+		if isClimbing {
+			// 翻山成功，重置失败次数
+			gr.ClimCounts[winningTeam] = 0
+		}
+
+		// 更新获胜队伍的级牌
+		if gr.MaxTrump != RankNone {
+			gr.Trumps[winningTeam] += levelUp
+			if gr.Trumps[winningTeam] > gr.MaxTrump {
+				gr.Trumps[winningTeam] = gr.MaxTrump // 最高为MaxTrump
+			}
+		}
+	}
+
+	// 更新当前级牌为获胜队伍的级牌
+	if gr.MaxTrump != RankNone {
+		gr.Trump = gr.Trumps[winningTeam]
+	} else {
+		gr.Trump = Rank2 // 如果没有最高级牌，则直接设为2
+	}
+
+	// 重置游戏状态
+	gr.Status = GameStatusWaiting
+	gr.StartedAt = 0
+	gr.FinishedAt = 0
+	gr.Winning = WinningInfo{}
+
+	// 重置玩家状态
+	for i := range gr.Players {
+		player := &gr.Players[i]
+		player.Status = StatusWaiting
+		player.Hand = nil
+		player.Played = nil
+		player.Rank = 0
+		player.IsWinner = false
+		player.PointChange = 0
+		player.CoinChange = 0
+	}
+
+	return nil
 }

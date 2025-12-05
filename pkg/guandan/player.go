@@ -11,11 +11,15 @@ const (
 
 // Player 玩家信息
 type Player struct {
-	UserId int64      // 玩家ID
-	Status PlayStatus // 玩家状态
-	Hand   Cards      // 当前手里的牌
-	Played Patterns   // 已经打出去的牌（记录每次打出的牌型）
-	Rank   int8       // 玩家名次，可能是0（未完成），1，2，3，4
+	UserId        int64      // 玩家ID
+	Status        PlayStatus // 玩家状态
+	Hand          Cards      // 当前手里的牌
+	Played        Patterns   // 已经打出去的牌（记录每次打出的牌型）
+	Rank          int8       // 玩家名次，可能是0（未完成），1，2，3，4
+	IsLostControl bool       // 是否托管
+	IsWinner      bool       // 是否为赢家
+	PointChange   int32      // 本局积分变化
+	CoinChange    int32      // 本局金币变化
 }
 
 // NewPlayer 创建一个新玩家
