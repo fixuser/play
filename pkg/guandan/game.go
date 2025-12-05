@@ -8,6 +8,11 @@ import (
 
 // 错误定义
 var (
+	ErrGameNotPlaying  = errors.New("game not playing")
+	ErrNotYourTurn     = errors.New("not your turn")
+	ErrInvalidPattern  = errors.New("invalid pattern")
+	ErrPlayFailed      = errors.New("play failed")
+	ErrPlayerNotFound  = errors.New("player not found")
 	ErrGameNotFinished = errors.New("game not finished")
 	ErrNoWinningTeam   = errors.New("no winning team")
 )
@@ -89,6 +94,7 @@ type WinningInfo struct {
 type GameRound struct {
 	Status     GameRoundStatus
 	Players    [4]Player   // 玩家
+	Index      int8        // 当前从哪位玩家开始出牌，0-3 对应 Players 索引
 	MinType    PatternType // 用于计算翻倍的最小牌型
 	MaxTrump   Rank        // 当前游戏中的最高级牌
 	Trump      Rank        // 当前头游在级牌
@@ -96,8 +102,10 @@ type GameRound struct {
 	ClimCounts [2]int8     // 当前两队的翻山次数, 翻山三次后失败级牌自动变为Rank2
 	StartedAt  int64       // 游戏开始时间（Unix时间戳，毫秒）
 	FinishedAt int64       // 游戏结束时间（Unix时间戳，毫秒）
-	Rounds     []GameRound // 历史回合记录, 上一局记录在0索引
 	Winning    WinningInfo // 本局获胜信息, 如果游戏未结束则为空
+	Trick      uint8       // 当前轮次
+	Tricks     [][]uint16  // 每轮出过的牌型记录, 其中uint16代表playerIndex(8位)和Player.Played的索引(8位)
+	Rounds     []GameRound // 历史回合记录, 上一局记录在0索引
 }
 
 // NewGameRound 创建一个新的游戏回合
@@ -126,6 +134,108 @@ func (gr *GameRound) IsReady() bool {
 		}
 	}
 	return true
+}
+
+// Play 玩家出牌
+// userId: 出牌玩家的用户ID
+// pattern: 出牌的牌型，如果为nil表示过牌
+func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
+	// 检查游戏状态
+	if gr.Status != GameStatusPlaying {
+		return ErrGameNotPlaying
+	}
+
+	// 获取当前应该出牌的玩家
+	currentPlayer := &gr.Players[gr.Index]
+
+	// 检查是否轮到该玩家出牌
+	if currentPlayer.UserId != userId {
+		return ErrNotYourTurn
+	}
+
+	// 如果pattern为nil，表示过牌（不出）
+	if pattern == nil {
+		return nil
+	}
+
+	// 检查牌型是否有效
+	if pattern.Type == PatternTypeNone {
+		return ErrInvalidPattern
+	}
+
+	// 玩家出牌
+	pattern.PlayerId = gr.Index
+	if !currentPlayer.Play(pattern) {
+		return ErrPlayFailed
+	}
+
+	// 确保当前轮次的Tricks数组存在
+	for len(gr.Tricks) <= int(gr.Trick) {
+		gr.Tricks = append(gr.Tricks, []uint16{})
+	}
+	// 记录到Tricks
+	// uint16: 高8位是playerIndex，低8位是Player.Played的索引
+	playedIndex := uint8(len(currentPlayer.Played) - 1)
+	trickRecord := uint16(gr.Index)<<8 | uint16(playedIndex)
+
+	// 确保当前轮次的Tricks数组存在
+	gr.Tricks[gr.Trick] = append(gr.Tricks[gr.Trick], trickRecord)
+
+	return nil
+}
+
+// GetPatterns 获取玩家刚打出的牌型
+func (gr *GameRound) GetPatterns(trickRecords []uint16) (patterns Patterns) {
+	if len(trickRecords) == 0 {
+		return
+	}
+
+	for _, record := range trickRecords {
+		playerIndex := int(record >> 8)
+		playedIndex := int(record & 0xFF)
+		if playerIndex >= 0 && playerIndex < len(gr.Players) {
+			player := &gr.Players[playerIndex]
+			if playedIndex >= 0 && playedIndex < len(player.Played) {
+				pattern := player.Played[playedIndex]
+				patterns = append(patterns, pattern)
+			}
+		}
+	}
+	return
+}
+
+// GetTrickRecords 获取当前轮次的出牌记录
+func (gr *GameRound) GetTrickRecords() []uint16 {
+	if int(gr.Trick) < len(gr.Tricks) {
+		return gr.Tricks[gr.Trick]
+	}
+	return nil
+}
+
+// GetLastTrickRecords 获取上一轮次的出牌记录
+func (gr *GameRound) GetLastTrickRecords() []uint16 {
+	if gr.Trick > 0 && int(gr.Trick-1) < len(gr.Tricks) {
+		return gr.Tricks[gr.Trick-1]
+	}
+	return nil
+}
+
+// NextPlayer 设置下一个出牌玩家
+func (gr *GameRound) NextPlayer() {
+	// 循环找到下一个还在游戏中的玩家
+	for range 4 {
+		gr.Index = (gr.Index + 1) % 4
+		if gr.Players[gr.Index].Status == StatusPlaying {
+			return
+		}
+	}
+}
+
+// NewTrick 开始新的一轮（当一轮结束时调用）
+// winnerIndex: 赢得这一轮的玩家索引
+func (gr *GameRound) NewTrick(winnerIndex int8) {
+	gr.Trick++
+	gr.Index = winnerIndex
 }
 
 // Start 开始游戏回合
@@ -161,6 +271,16 @@ func (gr *GameRound) nextRank() int8 {
 	return maxRank + 1
 }
 
+// GetWinningIndex 获取头游的玩家索引
+func (gr *GameRound) GetWinningIndex() int8 {
+	for i, player := range gr.Players {
+		if player.Rank == 1 {
+			return int8(i)
+		}
+	}
+	return 0 // 默认玩家0
+}
+
 // GetTeammate 获取队友的索引 (0,2一队 1,3一队)
 func (gr *GameRound) GetTeammate(playerIndex int) int {
 	return (playerIndex + 2) % 4
@@ -181,6 +301,11 @@ func (gr *GameRound) IsTeammate(p1, p2 int) bool {
 	return (p1+p2)%2 == 0 && p1 != p2
 }
 
+// NextIndex 设置下一个出牌玩家索引
+func (gr *GameRound) NextIndex() {
+	gr.Index = (gr.Index + 1) % int8(len(gr.Players))
+}
+
 // Check 检查玩家完成状态并更新排名
 // 返回是否有新的排名产生
 func (gr *GameRound) Check() bool {
@@ -198,6 +323,14 @@ func (gr *GameRound) Check() bool {
 			player.Status = StatusFinished
 			player.Rank = gr.nextRank()
 			hasNewRank = true
+
+			// 如果当前出牌人打完了，出牌权交给队友
+			if gr.Index == int8(i) {
+				teammateIndex := gr.GetTeammate(i)
+				if gr.Players[teammateIndex].Status == StatusPlaying {
+					gr.Index = int8(teammateIndex)
+				}
+			}
 		}
 	}
 
@@ -367,6 +500,9 @@ func (gr *GameRound) NextRound() error {
 		return ErrNoWinningTeam
 	}
 
+	// 设置下一局由头游出牌
+	gr.Index = gr.GetWinningIndex()
+
 	// 保存当前回合到历史记录（插入到最前面）
 	currentRound := *gr
 	currentRound.Rounds = nil // 避免嵌套保存历史记录
@@ -393,24 +529,29 @@ func (gr *GameRound) NextRound() error {
 	} else {
 		// 翻山成功或非翻山情况，正常升级
 		if isClimbing {
-			// 翻山成功，重置失败次数
-			gr.ClimCounts[winningTeam] = 0
-		}
-
-		// 更新获胜队伍的级牌
-		if gr.MaxTrump != RankNone {
-			gr.Trumps[winningTeam] += levelUp
-			if gr.Trumps[winningTeam] > gr.MaxTrump {
-				gr.Trumps[winningTeam] = gr.MaxTrump // 最高为MaxTrump
+			// 翻山成功，重置所有状态（相当于重新开始）
+			gr.Trumps = [2]Rank{Rank2, Rank2}
+			gr.ClimCounts = [2]int8{0, 0}
+			gr.Trump = Rank2
+		} else {
+			// 非翻山情况，正常升级
+			// 更新获胜队伍的级牌
+			if gr.MaxTrump != RankNone {
+				gr.Trumps[winningTeam] += levelUp
+				if gr.Trumps[winningTeam] > gr.MaxTrump {
+					gr.Trumps[winningTeam] = gr.MaxTrump // 最高为MaxTrump
+				}
 			}
 		}
 	}
 
-	// 更新当前级牌为获胜队伍的级牌
-	if gr.MaxTrump != RankNone {
-		gr.Trump = gr.Trumps[winningTeam]
-	} else {
-		gr.Trump = Rank2 // 如果没有最高级牌，则直接设为2
+	// 更新当前级牌为获胜队伍的级牌（翻山成功时已经设置为Rank2）
+	if !isClimbing || climbFailed {
+		if gr.MaxTrump != RankNone {
+			gr.Trump = gr.Trumps[winningTeam]
+		} else {
+			gr.Trump = Rank2 // 如果没有最高级牌，则直接设为2
+		}
 	}
 
 	// 重置游戏状态
@@ -430,6 +571,5 @@ func (gr *GameRound) NextRound() error {
 		player.PointChange = 0
 		player.CoinChange = 0
 	}
-
 	return nil
 }

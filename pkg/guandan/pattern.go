@@ -18,6 +18,7 @@ const (
 
 // 三连对、三同连张、顺子、同花顺时，可视作1
 type Pattern struct {
+	PlayerId  int8
 	Type      PatternType
 	Trump     Rank
 	Cards     Cards
