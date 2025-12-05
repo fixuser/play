@@ -56,7 +56,7 @@ func TestPlayer_Play_Success(t *testing.T) {
 	}
 
 	// 打出一对3
-	pattern := &Pattern{
+	pattern := Pattern{
 		Type: PatternTypePair,
 		Cards: Cards{
 			{Rank: Rank3, Suit: SuitSpader},
@@ -93,7 +93,7 @@ func TestPlayer_Play_Fail_NoCards(t *testing.T) {
 	}
 
 	// 尝试打出手牌中没有的牌
-	pattern := &Pattern{
+	pattern := Pattern{
 		Type: PatternTypePair,
 		Cards: Cards{
 			{Rank: Rank5, Suit: SuitSpader},
@@ -112,13 +112,25 @@ func TestPlayer_Play_Fail_NoCards(t *testing.T) {
 	}
 }
 
-func TestPlayer_Play_Fail_NilPattern(t *testing.T) {
+func TestPlayer_Play_Pass(t *testing.T) {
 	player := NewPlayer(1)
 	player.Hand = Cards{{Rank: Rank3, Suit: SuitSpader}}
 
-	success := player.Play(nil)
-	if success {
-		t.Error("Play should fail with nil pattern")
+	// 过牌（空Pattern，Type为None）
+	pattern := Pattern{Type: PatternTypeNone}
+	success := player.Play(pattern)
+	if !success {
+		t.Error("Play should succeed with pass (empty pattern)")
+	}
+
+	// 手牌不应该变化
+	if player.HandCount() != 1 {
+		t.Errorf("hand should remain unchanged, got %d cards", player.HandCount())
+	}
+
+	// 应该记录了过牌
+	if player.PlayedCount() != 1 {
+		t.Errorf("should record pass, got %d played", player.PlayedCount())
 	}
 }
 
@@ -126,7 +138,7 @@ func TestPlayer_Play_Fail_EmptyCards(t *testing.T) {
 	player := NewPlayer(1)
 	player.Hand = Cards{{Rank: Rank3, Suit: SuitSpader}}
 
-	pattern := &Pattern{
+	pattern := Pattern{
 		Type:  PatternTypeSingle,
 		Cards: Cards{},
 	}
@@ -137,18 +149,20 @@ func TestPlayer_Play_Fail_EmptyCards(t *testing.T) {
 	}
 }
 
-func TestPlayer_Play_Fail_PatternTypeNone(t *testing.T) {
+func TestPlayer_Play_PassWithCards(t *testing.T) {
 	player := NewPlayer(1)
 	player.Hand = Cards{{Rank: Rank3, Suit: SuitSpader}}
 
-	pattern := &Pattern{
+	// 过牌但带了牌（应该成功，因为过牌时不会移除手牌）
+	pattern := Pattern{
 		Type:  PatternTypeNone,
 		Cards: Cards{{Rank: Rank3, Suit: SuitSpader}},
 	}
 
 	success := player.Play(pattern)
-	if success {
-		t.Error("Play should fail with PatternTypeNone")
+	// 过牌时即使带了牌也不会移除手牌（取决于实现）
+	if !success {
+		t.Error("Play should succeed with PatternTypeNone")
 	}
 }
 
@@ -162,7 +176,7 @@ func TestPlayer_PlayedCards(t *testing.T) {
 	}
 
 	// 打出一对3
-	pattern1 := &Pattern{
+	pattern1 := Pattern{
 		Type: PatternTypePair,
 		Cards: Cards{
 			{Rank: Rank3, Suit: SuitSpader},
@@ -172,7 +186,7 @@ func TestPlayer_PlayedCards(t *testing.T) {
 	player.Play(pattern1)
 
 	// 打出单张4
-	pattern2 := &Pattern{
+	pattern2 := Pattern{
 		Type: PatternTypeSingle,
 		Cards: Cards{
 			{Rank: Rank4, Suit: SuitClub},
@@ -240,7 +254,7 @@ func TestPlayer_Play_DuplicateCards(t *testing.T) {
 	}
 
 	// 打出两张相同的3
-	pattern := &Pattern{
+	pattern := Pattern{
 		Type: PatternTypePair,
 		Cards: Cards{
 			{Rank: Rank3, Suit: SuitSpader},

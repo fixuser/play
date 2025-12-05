@@ -10,7 +10,6 @@ import (
 var (
 	ErrGameNotPlaying  = errors.New("game not playing")
 	ErrNotYourTurn     = errors.New("not your turn")
-	ErrInvalidPattern  = errors.New("invalid pattern")
 	ErrPlayFailed      = errors.New("play failed")
 	ErrPlayerNotFound  = errors.New("player not found")
 	ErrGameNotFinished = errors.New("game not finished")
@@ -137,8 +136,9 @@ func (gr *GameRound) IsReady() bool {
 
 // Play 玩家出牌
 // userId: 出牌玩家的用户ID
-// pattern: 出牌的牌型，如果为nil表示过牌
-func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
+// pattern: 出牌的牌型，如果Type为PatternTypeNone表示过牌（不出）
+// 返回值：error 错误信息
+func (gr *GameRound) Play(userId int64, pattern Pattern) error {
 	// 检查游戏状态
 	if gr.Status != GameStatusPlaying {
 		return ErrGameNotPlaying
@@ -152,17 +152,7 @@ func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
 		return ErrNotYourTurn
 	}
 
-	// 如果pattern为nil，表示过牌（不出）
-	if pattern == nil {
-		return nil
-	}
-
-	// 检查牌型是否有效
-	if pattern.Type == PatternTypeNone {
-		return ErrInvalidPattern
-	}
-
-	// 玩家出牌
+	// 玩家出牌（包括过牌，Type为None也会记录）
 	pattern.PlayerId = gr.Index
 	if !currentPlayer.Play(pattern) {
 		return ErrPlayFailed
@@ -176,6 +166,7 @@ func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
 	playedIndex := uint8(len(currentPlayer.Played) - 1)
 	trickRecord := Trick{
 		PlayerIndex:  uint8(gr.Index),
+		PatternType:  pattern.Type,
 		PatternIndex: playedIndex,
 	}
 	gr.Tricks[gr.Trick] = append(gr.Tricks[gr.Trick], trickRecord)
@@ -183,56 +174,96 @@ func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
 	return nil
 }
 
-// GetPatterns 获取玩家刚打出的牌型
-func (gr *GameRound) GetPatterns(trickRecords Tricks) (patterns Patterns) {
-	if len(trickRecords) == 0 {
-		return
+// PlayingCount 获取还在游戏中的玩家数量
+func (gr *GameRound) PlayingCount() int {
+	count := 0
+	for _, player := range gr.Players {
+		if player.Status == StatusPlaying {
+			count++
+		}
+	}
+	return count
+}
+
+// IsTrickFinished 判断当前轮次是否完成
+// 完成条件：本轮出牌的所有人中，除了最后一个出牌的人外，其余都过牌了
+// 注意：需要考虑玩家在本轮中途打完牌的情况
+func (gr *GameRound) IsTrickFinished() bool {
+	if int(gr.Trick) >= len(gr.Tricks) {
+		return false
 	}
 
-	for _, record := range trickRecords {
-		playerIndex := int(record.PlayerIndex)
-		playedIndex := int(record.PatternIndex)
-		if playerIndex >= 0 && playerIndex < len(gr.Players) {
-			player := &gr.Players[playerIndex]
-			if playedIndex >= 0 && playedIndex < len(player.Played) {
-				pattern := player.Played[playedIndex]
-				patterns = append(patterns, pattern)
+	tricks := gr.Tricks[gr.Trick]
+	if len(tricks) == 0 {
+		return false
+	}
+
+	// 统计本轮参与出牌的玩家（去重）
+	participated := make(map[uint8]bool)
+	for _, t := range tricks {
+		participated[t.PlayerIndex] = true
+	}
+
+	// 统计过牌数量和非过牌数量
+	passCount := 0
+	for _, t := range tricks {
+		if t.IsPass() {
+			passCount++
+		}
+	}
+
+	// 本轮参与的玩家数量
+	participatedCount := len(participated)
+
+	// 如果过牌数量 >= 参与玩家数量 - 1，则本轮完成
+	// 例如：4人参与，需要3人pass；3人参与，需要2人pass
+	return passCount > 0 && passCount >= participatedCount-1
+}
+
+// GetTrickWinner 获取当前轮次的赢家索引
+// 返回值：赢家玩家索引，如果本轮未完成返回 -1
+// Check 完成后调用此方法以获取赢家
+func (gr *GameRound) GetTrickWinner() int8 {
+	if !gr.IsTrickFinished() {
+		return -1
+	}
+
+	tricks := gr.Tricks[gr.Trick]
+
+	// 找到最后一个非Pass的出牌记录，那就是赢家
+	for i := len(tricks) - 1; i >= 0; i-- {
+		if !tricks[i].IsPass() {
+			winnerIndex := int8(tricks[i].PlayerIndex)
+
+			// 检查赢家是否已经打完牌
+			winner := &gr.Players[winnerIndex]
+			if winner.Status != StatusPlaying {
+				// 赢家已经打完牌，把出牌权交给队友
+				teammateIndex := gr.GetTeammate(int(winnerIndex))
+				if gr.Players[teammateIndex].Status == StatusPlaying {
+					return int8(teammateIndex)
+				}
 			}
+			return winnerIndex
 		}
 	}
-	return
-}
 
-// GetTrickRecords 获取当前轮次的出牌记录
-func (gr *GameRound) GetTrickRecords() Tricks {
-	if int(gr.Trick) < len(gr.Tricks) {
-		return gr.Tricks[gr.Trick]
-	}
-	return nil
-}
-
-// GetLastTrickRecords 获取上一轮次的出牌记录
-func (gr *GameRound) GetLastTrickRecords() Tricks {
-	if gr.Trick > 0 && int(gr.Trick-1) < len(gr.Tricks) {
-		return gr.Tricks[gr.Trick-1]
-	}
-	return nil
-}
-
-// GetTrickWinnerIndex 获取当前轮次的赢家玩家索引
-func (gr *GameRound) GetTrickWinnerIndex() int8 {
-	for i := len(gr.Tricks) - 1; i >= 0; i-- {
-		trickRecords := gr.Tricks[i]
-		if len(trickRecords) == 0 {
-			continue
-		}
-		record := trickRecords[len(trickRecords)-1]
-		return int8(record.PlayerIndex)
-	}
 	return -1
 }
 
-// NextPlayer 设置下一个出牌玩家
+// FinishTrick 完成当前轮次，开始新的一轮
+// 返回值：是否成功完成轮次
+func (gr *GameRound) FinishTrick() bool {
+	winnerIndex := gr.GetTrickWinner()
+	if winnerIndex < 0 {
+		return false
+	}
+
+	gr.Trick++
+	gr.Index = winnerIndex
+	return true
+}
+
 func (gr *GameRound) NextPlayer() {
 	// 循环找到下一个还在游戏中的玩家
 	for range 4 {
@@ -335,14 +366,6 @@ func (gr *GameRound) Check() bool {
 			player.Status = StatusFinished
 			player.Rank = gr.nextRank()
 			hasNewRank = true
-
-			// 如果当前出牌人打完了，出牌权交给队友
-			if gr.Index == int8(i) {
-				teammateIndex := gr.GetTeammate(i)
-				if gr.Players[teammateIndex].Status == StatusPlaying {
-					gr.Index = int8(teammateIndex)
-				}
-			}
 		}
 	}
 
@@ -580,4 +603,16 @@ func (gr *GameRound) NextRound() error {
 		player.CoinChange = 0
 	}
 	return nil
+}
+
+// IsAllFinished 检查所有玩家是否都已完成
+func (gr *GameRound) IsAllFinished() bool {
+	if !gr.IsFinished() {
+		return false
+	}
+	// 如果是升级赛，检查是否为翻山获胜
+	if gr.MaxTrump != RankNone {
+		return gr.Winning.IsClimbing
+	}
+	return false
 }

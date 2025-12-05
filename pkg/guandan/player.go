@@ -36,8 +36,16 @@ func (p *Player) SetHand(cards Cards) {
 
 // Play 打出指定的牌型
 // 返回是否成功打出（手牌中是否有这些牌）
-func (p *Player) Play(pattern *Pattern) bool {
-	if pattern == nil || len(pattern.Cards) == 0 || pattern.Type == PatternTypeNone {
+// 如果 pattern.Type 为 PatternTypeNone，表示过牌，不需要检查手牌
+func (p *Player) Play(pattern Pattern) bool {
+	// 过牌时不需要移除手牌
+	if pattern.Type == PatternTypeNone {
+		p.Played = append(p.Played, pattern)
+		return true
+	}
+
+	// 非过牌时，Cards 必须非空
+	if len(pattern.Cards) == 0 {
 		return false
 	}
 
@@ -59,11 +67,11 @@ func (p *Player) Play(pattern *Pattern) bool {
 			return false
 		}
 	}
-
 	// 更新手牌
 	p.Hand = handCopy
+
 	// 记录打出的牌型
-	p.Played = append(p.Played, *pattern)
+	p.Played = append(p.Played, pattern)
 	return true
 }
 

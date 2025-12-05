@@ -1,6 +1,9 @@
 package guandan
 
-import "math/rand/v2"
+import (
+	"fmt"
+	"math/rand/v2"
+)
 
 // Suit 牌的花色
 type Suit uint8
@@ -50,6 +53,24 @@ func (r Rank) Weight(trump Rank) uint8 {
 type Card struct {
 	Rank Rank
 	Suit Suit
+}
+
+// MarshalBinary 序列化为二进制
+func (c Card) MarshalBinary() (data []byte, err error) {
+	data = make([]byte, 2)
+	data[0] = byte(c.Rank)
+	data[1] = byte(c.Suit)
+	return
+}
+
+// UnmarshalBinary 从二进制反序列化
+func (c *Card) UnmarshalBinary(data []byte) error {
+	if len(data) < 2 {
+		return fmt.Errorf("invalid card data")
+	}
+	c.Rank = Rank(data[0])
+	c.Suit = Suit(data[1])
+	return nil
 }
 
 // Equal 判断两张牌是否相等
