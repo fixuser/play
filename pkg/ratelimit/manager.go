@@ -9,7 +9,7 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/play/play/pkg/meta"
+	"github.com/iot/simpro/pkg/meta"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
@@ -74,7 +74,7 @@ func NewManager(rdb redis.Cmdable, opts ...ManagerOption) *RateLimiterManager {
 
 	// 加载初始配置
 	if err := m.loadConfig(); err != nil {
-		log.Error().Err(err).Msg("加载初始限流配置失败")
+		log.Error().Err(err).Msg("failed to load initial rate limit configs")
 	}
 
 	// 启动后台配置重载循环
@@ -99,14 +99,14 @@ func (m *RateLimiterManager) loadConfig() error {
 	for name, configJSON := range configs {
 		var cfg RateLimitConfig
 		if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
-			log.Error().Err(err).Str("name", name).Msg("解析限流配置失败")
+			log.Error().Err(err).Str("name", name).Msg("failed to parse rate limit config")
 			continue
 		}
 
 		// 编译路径正则表达式
 		pathRegexp, err := regexp.Compile(cfg.Path)
 		if err != nil {
-			log.Error().Err(err).Str("name", name).Str("path", cfg.Path).Msg("路径正则表达式无效")
+			log.Error().Err(err).Str("name", name).Str("path", cfg.Path).Msg("invalid path regex")
 			continue
 		}
 		cfg.pathRegexp = pathRegexp
@@ -121,12 +121,12 @@ func (m *RateLimiterManager) loadConfig() error {
 		cfg.name = name
 
 		newConfigs = append(newConfigs, &cfg)
-		log.Debug().Str("name", name).Str("path", cfg.Path).Int("count", cfg.Count).Dur("duration", cfg.Duration).Msg("已加载限流配置")
+		log.Debug().Str("name", name).Str("path", cfg.Path).Int("count", cfg.Count).Dur("duration", cfg.Duration).Msg("loaded rate limit config")
 	}
 
 	m.configs.Store(newConfigs)
 
-	log.Info().Int("count", len(newConfigs)).Msg("限流配置加载完成")
+	log.Info().Int("count", len(newConfigs)).Msg("rate limit configs loaded")
 	return nil
 }
 
@@ -141,7 +141,7 @@ func (m *RateLimiterManager) reloadConfigLoop() {
 			return
 		case <-ticker.C:
 			if err := m.loadConfig(); err != nil {
-				log.Error().Err(err).Msg("重新加载限流配置失败")
+				log.Error().Err(err).Msg("failed to reload rate limit configs")
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func (m *RateLimiterManager) Limit(ctx context.Context) bool {
 		if cfg.Key != "" {
 			keyValue = getKeyValue(ctx, cfg.Key)
 			if keyValue == "" {
-				log.Debug().Str("path", path).Str("method", method).Str("key", cfg.Key).Msg("上下文中未找到限流键")
+				log.Debug().Str("path", path).Str("method", method).Str("key", cfg.Key).Msg("rate limit key not found in context")
 			}
 		}
 
@@ -205,7 +205,7 @@ func (m *RateLimiterManager) Limit(ctx context.Context) bool {
 
 		// 应用限流
 		if limiter.Limit(ctx) {
-			log.Warn().Str("path", path).Str("method", method).Str("key", cfg.Key).Str("key_value", keyValue).Str("limiterKey", limiterKey).Msg("超出限流限制")
+			log.Warn().Str("path", path).Str("method", method).Str("key", cfg.Key).Str("key_value", keyValue).Str("limiterKey", limiterKey).Msg("exceeded rate limit")
 			return true
 		}
 
