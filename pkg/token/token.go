@@ -87,8 +87,8 @@ func (tk *Token) Update(ctx context.Context, val *Value, opts ...Option) (err er
 	return
 }
 
-// Remove removes the token
-func (tk *Token) Remove(ctx context.Context, userId int64, token string) (err error) {
+// Delete removes the token
+func (tk *Token) Delete(ctx context.Context, userId int64, token string) (err error) {
 	if userId > 0 && token == "" { // 通过 userId 查找 token
 		token = tk.rdb.HGet(ctx, tk.tokenUniqueKey, cast.ToString(userId)).Val()
 		if token == "" {
@@ -116,6 +116,10 @@ func (tk *Token) Remove(ctx context.Context, userId int64, token string) (err er
 
 // Get gets the token
 func (tk *Token) Get(ctx context.Context, token string) (val *Value, err error) {
+	if token == "" {
+		return
+	}
+
 	val = new(Value)
 	err = tk.rdb.HGet(ctx, tk.tokenDataKey, token).Scan(val)
 	if err == redis.Nil {

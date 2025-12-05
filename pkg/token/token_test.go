@@ -250,7 +250,7 @@ func TestToken_Update(t *testing.T) {
 	})
 }
 
-func TestToken_Remove(t *testing.T) {
+func TestToken_Delete(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
 	defer client.Close()
@@ -265,7 +265,7 @@ func TestToken_Remove(t *testing.T) {
 		require.NoError(t, err)
 
 		// 删除token
-		err = tk.Remove(ctx, 0, val.AccessToken)
+		err = tk.Delete(ctx, 0, val.AccessToken)
 		require.NoError(t, err)
 
 		// token应该不存在
@@ -279,12 +279,12 @@ func TestToken_Remove(t *testing.T) {
 	})
 
 	t.Run("remove non-existing token", func(t *testing.T) {
-		err := tk.Remove(ctx, 0, "non-existing-token")
+		err := tk.Delete(ctx, 0, "non-existing-token")
 		assert.NoError(t, err) // 不应该报错
 	})
 }
 
-func TestToken_RemoveByUserId(t *testing.T) {
+func TestToken_DeleteByUserId(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
 	defer client.Close()
@@ -299,7 +299,7 @@ func TestToken_RemoveByUserId(t *testing.T) {
 		require.NoError(t, err)
 
 		// 通过用户ID删除token
-		err = tk.Remove(ctx, 6001, "")
+		err = tk.Delete(ctx, 6001, "")
 		require.NoError(t, err)
 
 		// token应该不存在
@@ -309,7 +309,7 @@ func TestToken_RemoveByUserId(t *testing.T) {
 	})
 
 	t.Run("remove non-existing user id", func(t *testing.T) {
-		err := tk.Remove(ctx, 9999, "")
+		err := tk.Delete(ctx, 9999, "")
 		assert.NoError(t, err) // 不应该报错
 	})
 }

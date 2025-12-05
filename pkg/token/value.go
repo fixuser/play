@@ -16,6 +16,7 @@ var _ encoding.BinaryUnmarshaler = (*Value)(nil)
 
 type Value struct {
 	UserId           int64
+	UserType         int8
 	AccessToken      string
 	RefreshToken     string
 	Platform         string // 平台类型
@@ -23,6 +24,20 @@ type Value struct {
 	TokenExpiredAt   time.Time
 	RefreshExpiredAt time.Time
 	Extras           []byte
+}
+
+func (v *Value) GetTokenExpiresIn() time.Duration {
+	if v == nil {
+		return 0
+	}
+	return time.Until(v.TokenExpiredAt)
+}
+
+func (v *Value) GetRefreshExpiresIn() time.Duration {
+	if v == nil {
+		return 0
+	}
+	return time.Until(v.RefreshExpiredAt)
 }
 
 // genToken generates a new token string
@@ -47,6 +62,7 @@ func (v *Value) Refresh() (newVal *Value) {
 	}
 	newVal = NewValue(v.UserId)
 	newVal.Platform = v.Platform
+	newVal.UserType = v.UserType
 	newVal.Extras = v.Extras
 	newVal.Set("refreshed_at", time.Now().Unix())
 	newVal.Set("old_access_token", v.AccessToken)
