@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewGameRound(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 	if gr == nil {
 		t.Fatal("NewGameRound returned nil")
 	}
@@ -15,13 +15,10 @@ func TestNewGameRound(t *testing.T) {
 	if gr.MaxTrump != RankA {
 		t.Errorf("expected MaxTrump %v, got %v", RankA, gr.MaxTrump)
 	}
-	if gr.MinType != PatternTypeBomb {
-		t.Errorf("expected MinType %v, got %v", PatternTypeBomb, gr.MinType)
-	}
 }
 
 func TestGameRound_IsReady(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 没有玩家时不应该准备好
 	if gr.IsReady() {
@@ -53,7 +50,7 @@ func TestGameRound_IsReady(t *testing.T) {
 }
 
 func TestGameRound_Start(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 未准备时不能开始
 	if gr.Start() {
@@ -87,7 +84,7 @@ func TestGameRound_Start(t *testing.T) {
 }
 
 func TestGameRound_Deal(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 	gr.Deal()
 
 	// 检查每个玩家都有牌
@@ -103,7 +100,7 @@ func TestGameRound_Deal(t *testing.T) {
 }
 
 func TestGameRound_GetTeammate(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	tests := []struct {
 		playerIndex int
@@ -124,7 +121,7 @@ func TestGameRound_GetTeammate(t *testing.T) {
 }
 
 func TestGameRound_IsTeammate(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 0和2是队友，1和3是队友
 	if !gr.IsTeammate(0, 2) {
@@ -142,7 +139,7 @@ func TestGameRound_IsTeammate(t *testing.T) {
 }
 
 func TestGameRound_Check_SingleFinish(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置玩家
 	for i := range gr.Players {
@@ -173,7 +170,7 @@ func TestGameRound_Check_SingleFinish(t *testing.T) {
 }
 
 func TestGameRound_Check_TeamFinish(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置玩家
 	for i := range gr.Players {
@@ -211,7 +208,7 @@ func TestGameRound_Check_TeamFinish(t *testing.T) {
 }
 
 func TestGameRound_GetWinningTeam(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 游戏未结束
 	if gr.GetWinningTeam() != -1 {
@@ -300,66 +297,66 @@ func TestTeamRank_Score(t *testing.T) {
 	}
 }
 
-func TestGameRound_CountPatternType(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+func TestGameRound_CountDouble(t *testing.T) {
+	gr := NewGameRound(RankA)
 
-	// 玩家0打出一个炸弹
+	// 玩家0打出一个6张炸弹（>=6张炸弹计入翻倍）
 	gr.Players[0].Played = Patterns{
-		{Type: PatternTypeBomb, Cards: Cards{{Rank: Rank5, Suit: SuitSpader}, {Rank: Rank5, Suit: SuitHeart}, {Rank: Rank5, Suit: SuitClub}, {Rank: Rank5, Suit: SuitDiamond}}},
+		{Type: PatternTypeBomb, Length: 6, Cards: Cards{{Rank: Rank5, Suit: SuitSpader}, {Rank: Rank5, Suit: SuitHeart}, {Rank: Rank5, Suit: SuitClub}, {Rank: Rank5, Suit: SuitDiamond}, {Rank: Rank5, Suit: SuitSpader}, {Rank: Rank5, Suit: SuitHeart}}},
 		{Type: PatternTypeSingle, Cards: Cards{{Rank: Rank3, Suit: SuitSpader}}},
 	}
 
-	// 玩家1打出一个同花顺
+	// 玩家1打出一个四大天王
 	gr.Players[1].Played = Patterns{
-		{Type: PatternTypeStraightFlush, Cards: Cards{{Rank: Rank3, Suit: SuitHeart}, {Rank: Rank4, Suit: SuitHeart}, {Rank: Rank5, Suit: SuitHeart}, {Rank: Rank6, Suit: SuitHeart}, {Rank: Rank7, Suit: SuitHeart}}},
+		{Type: PatternTypeFourJokers, Cards: Cards{}},
 	}
 
-	// 统计炸弹及以上
-	count := gr.CountPatternType(PatternTypeBomb)
-	if count != 2 { // 1个炸弹 + 1个同花顺（PatternTypeStraightFlush < PatternTypeBomb，所以只有炸弹）
-		// 需要检查PatternType的顺序
+	// 统计翻倍牌型（6张及以上炸弹 或 四大天王等）
+	count := gr.CountDouble()
+	if count != 2 {
+		t.Errorf("expected count 2, got %d", count)
 	}
 }
 
 func TestGameRound_CalcMultiplier(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
-	// 没有炸弹，倍数为1
-	multiplier := gr.CalcMultiplier(PatternTypeBomb)
+	// 没有翻倍牌型，倍数为1
+	multiplier := gr.CalcMultiplier()
 	if multiplier != 1 {
 		t.Errorf("expected multiplier 1, got %d", multiplier)
 	}
 
-	// 添加1个炸弹
+	// 添加1个6张炸弹
 	gr.Players[0].Played = Patterns{
-		{Type: PatternTypeBomb, Cards: Cards{{Rank: Rank5, Suit: SuitSpader}}},
+		{Type: PatternTypeBomb, Length: 6, Cards: Cards{{Rank: Rank5, Suit: SuitSpader}}},
 	}
-	multiplier = gr.CalcMultiplier(PatternTypeBomb)
+	multiplier = gr.CalcMultiplier()
 	if multiplier != 2 {
 		t.Errorf("expected multiplier 2, got %d", multiplier)
 	}
 
-	// 添加2个炸弹
+	// 添加1个四大天王
 	gr.Players[1].Played = Patterns{
-		{Type: PatternTypeBomb, Cards: Cards{{Rank: Rank6, Suit: SuitSpader}}},
+		{Type: PatternTypeFourJokers, Cards: Cards{}},
 	}
-	multiplier = gr.CalcMultiplier(PatternTypeBomb)
+	multiplier = gr.CalcMultiplier()
 	if multiplier != 4 {
 		t.Errorf("expected multiplier 4, got %d", multiplier)
 	}
 
-	// 添加3个炸弹
+	// 添加1个7张炸弹
 	gr.Players[2].Played = Patterns{
-		{Type: PatternTypeFourJokers, Cards: Cards{}}, // 四大天王也算
+		{Type: PatternTypeBomb, Length: 7, Cards: Cards{}},
 	}
-	multiplier = gr.CalcMultiplier(PatternTypeBomb)
+	multiplier = gr.CalcMultiplier()
 	if multiplier != 8 {
 		t.Errorf("expected multiplier 8, got %d", multiplier)
 	}
 }
 
 func TestGameRound_Settle(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 游戏未结束
 	err := gr.Settle(10, 100)
@@ -411,7 +408,7 @@ func TestGameRound_Settle(t *testing.T) {
 }
 
 func TestGameRound_NextRound(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置初始级牌
 	gr.Trumps[0] = Rank2
@@ -482,7 +479,7 @@ func TestGameRound_NextRound(t *testing.T) {
 }
 
 func TestGameRound_GetTeamRanks(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 	gr.Players[0].Rank = 1
 	gr.Players[1].Rank = 3
 	gr.Players[2].Rank = 2
@@ -502,7 +499,7 @@ func TestGameRound_GetTeamRanks(t *testing.T) {
 }
 
 func TestGameRound_FullGame(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 初始化级牌
 	gr.Trumps[0] = Rank2
@@ -594,7 +591,7 @@ func TestTeamRank_IsClimbFailed(t *testing.T) {
 }
 
 func TestGameRound_IsClimbing(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 未设置MaxTrump和Trump，不在翻山
 	gr.MaxTrump = RankNone
@@ -617,7 +614,7 @@ func TestGameRound_IsClimbing(t *testing.T) {
 }
 
 func TestGameRound_ClimbFailed(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA
@@ -668,7 +665,7 @@ func TestGameRound_ClimbFailed(t *testing.T) {
 }
 
 func TestGameRound_ClimbFailedThreeTimes(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA
@@ -736,7 +733,7 @@ func TestGameRound_ClimbFailedThreeTimes(t *testing.T) {
 }
 
 func TestGameRound_ClimbSuccess(t *testing.T) {
-	gr := NewGameRound(RankA, PatternTypeBomb)
+	gr := NewGameRound(RankA)
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA

@@ -109,11 +109,10 @@ type GameRound struct {
 }
 
 // NewGameRound 创建一个新的游戏回合
-func NewGameRound(maxTrump Rank, minType PatternType) *GameRound {
+func NewGameRound(maxTrump Rank) *GameRound {
 	return &GameRound{
 		Status:   GameStatusWaiting,
 		MaxTrump: maxTrump,
-		MinType:  minType,
 	}
 }
 
@@ -415,14 +414,11 @@ func (gr *GameRound) GetWinningTeam() int8 {
 	return -1
 }
 
-// CountPatternType 统计所有玩家打出的 >= minType 的牌型数量
-func (gr *GameRound) CountPatternType(minType PatternType) (count int32) {
-	if minType == PatternTypeNone {
-		return 0
-	}
+// CountDouble 计算符合翻倍条件的牌型数量
+func (gr *GameRound) CountDouble() (count int32) {
 	for _, player := range gr.Players {
 		for _, pattern := range player.Played {
-			if pattern.Type >= minType {
+			if (pattern.Type == PatternTypeBomb && pattern.Length >= 6) || pattern.Type > PatternTypeBomb {
 				count++
 			}
 		}
@@ -433,8 +429,8 @@ func (gr *GameRound) CountPatternType(minType PatternType) (count int32) {
 // CalcMultiplier 计算翻倍倍数
 // minType: 最小牌型，统计 >= minType 的数量
 // 返回 2^N，N 为符合条件的牌型数量
-func (gr *GameRound) CalcMultiplier(minType PatternType) int32 {
-	count := gr.CountPatternType(minType)
+func (gr *GameRound) CalcMultiplier() int32 {
+	count := gr.CountDouble()
 	if count == 0 {
 		return 1
 	}
@@ -445,7 +441,6 @@ func (gr *GameRound) CalcMultiplier(minType PatternType) int32 {
 // Settle 结算函数
 // basePoint: 基础积分
 // baseCoin: 基础金币
-// minType: 用于计算翻倍的最小牌型（如 PatternTypeBomb）
 func (gr *GameRound) Settle(basePoint, baseCoin int32) error {
 	if gr.Status != GameStatusFinished {
 		return ErrGameNotFinished
@@ -461,7 +456,7 @@ func (gr *GameRound) Settle(basePoint, baseCoin int32) error {
 	teamRanks := gr.GetTeamRanks()
 
 	// 计算翻倍
-	multiplier := int32(gr.CalcMultiplier(gr.MinType))
+	multiplier := int32(gr.CalcMultiplier())
 
 	// 获取获胜队伍的积分倍率
 	winTeamRank := teamRanks[winningTeam]
