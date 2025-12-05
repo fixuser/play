@@ -104,7 +104,7 @@ type GameRound struct {
 	FinishedAt int64       // 游戏结束时间（Unix时间戳，毫秒）
 	Winning    WinningInfo // 本局获胜信息, 如果游戏未结束则为空
 	Trick      uint8       // 当前轮次
-	Tricks     [][]uint16  // 每轮出过的牌型记录, 其中uint16代表playerIndex(8位)和Player.Played的索引(8位)
+	Tricks     []Tricks    // 每轮出过的牌型记录
 	Rounds     []GameRound // 历史回合记录, 上一局记录在0索引
 }
 
@@ -171,28 +171,28 @@ func (gr *GameRound) Play(userId int64, pattern *Pattern) error {
 
 	// 确保当前轮次的Tricks数组存在
 	for len(gr.Tricks) <= int(gr.Trick) {
-		gr.Tricks = append(gr.Tricks, []uint16{})
+		gr.Tricks = append(gr.Tricks, Tricks{})
 	}
 	// 记录到Tricks
-	// uint16: 高8位是playerIndex，低8位是Player.Played的索引
 	playedIndex := uint8(len(currentPlayer.Played) - 1)
-	trickRecord := uint16(gr.Index)<<8 | uint16(playedIndex)
-
-	// 确保当前轮次的Tricks数组存在
+	trickRecord := Trick{
+		PlayerIndex:  uint8(gr.Index),
+		PatternIndex: playedIndex,
+	}
 	gr.Tricks[gr.Trick] = append(gr.Tricks[gr.Trick], trickRecord)
 
 	return nil
 }
 
 // GetPatterns 获取玩家刚打出的牌型
-func (gr *GameRound) GetPatterns(trickRecords []uint16) (patterns Patterns) {
+func (gr *GameRound) GetPatterns(trickRecords Tricks) (patterns Patterns) {
 	if len(trickRecords) == 0 {
 		return
 	}
 
 	for _, record := range trickRecords {
-		playerIndex := int(record >> 8)
-		playedIndex := int(record & 0xFF)
+		playerIndex := int(record.PlayerIndex)
+		playedIndex := int(record.PatternIndex)
 		if playerIndex >= 0 && playerIndex < len(gr.Players) {
 			player := &gr.Players[playerIndex]
 			if playedIndex >= 0 && playedIndex < len(player.Played) {
@@ -205,7 +205,7 @@ func (gr *GameRound) GetPatterns(trickRecords []uint16) (patterns Patterns) {
 }
 
 // GetTrickRecords 获取当前轮次的出牌记录
-func (gr *GameRound) GetTrickRecords() []uint16 {
+func (gr *GameRound) GetTrickRecords() Tricks {
 	if int(gr.Trick) < len(gr.Tricks) {
 		return gr.Tricks[gr.Trick]
 	}
@@ -213,11 +213,24 @@ func (gr *GameRound) GetTrickRecords() []uint16 {
 }
 
 // GetLastTrickRecords 获取上一轮次的出牌记录
-func (gr *GameRound) GetLastTrickRecords() []uint16 {
+func (gr *GameRound) GetLastTrickRecords() Tricks {
 	if gr.Trick > 0 && int(gr.Trick-1) < len(gr.Tricks) {
 		return gr.Tricks[gr.Trick-1]
 	}
 	return nil
+}
+
+// GetTrickWinnerIndex 获取当前轮次的赢家玩家索引
+func (gr *GameRound) GetTrickWinnerIndex() int8 {
+	for i := len(gr.Tricks) - 1; i >= 0; i-- {
+		trickRecords := gr.Tricks[i]
+		if len(trickRecords) == 0 {
+			continue
+		}
+		record := trickRecords[len(trickRecords)-1]
+		return int8(record.PlayerIndex)
+	}
+	return -1
 }
 
 // NextPlayer 设置下一个出牌玩家

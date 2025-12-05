@@ -778,13 +778,25 @@ func TestGameRound_ClimbSuccess(t *testing.T) {
 		t.Fatalf("NextRound failed: %v", err)
 	}
 
-	// 翻山成功，失败次数应该重置为0
+	// 翻山成功，所有状态应该重置（相当于重新开始游戏）
+	// 失败次数应该重置为0
 	if gr.ClimCounts[0] != 0 {
 		t.Errorf("team A climb count should be reset to 0 after success, got %d", gr.ClimCounts[0])
 	}
+	if gr.ClimCounts[1] != 0 {
+		t.Errorf("team B climb count should be reset to 0 after success, got %d", gr.ClimCounts[1])
+	}
 
-	// 级牌保持A（已经是最高，不能再升）
-	if gr.Trumps[0] != RankA {
-		t.Errorf("team A trump should remain RankA (max), got %d", gr.Trumps[0])
+	// 翻山成功，级牌重置为Rank2（重新开始）
+	if gr.Trumps[0] != Rank2 {
+		t.Errorf("team A trump should reset to Rank2 after climb success, got %d", gr.Trumps[0])
+	}
+	if gr.Trumps[1] != Rank2 {
+		t.Errorf("team B trump should reset to Rank2 after climb success, got %d", gr.Trumps[1])
+	}
+
+	// 当前级牌也应该重置为Rank2
+	if gr.Trump != Rank2 {
+		t.Errorf("current trump should reset to Rank2 after climb success, got %d", gr.Trump)
 	}
 }
