@@ -220,7 +220,7 @@ func checkSequence(rankCounts map[Rank]int, wildCount int, length int, width int
 		possible := true
 		var currentMainPoint uint8
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			var r Rank
 			if start == 0 && i == 0 {
 				r = RankA
@@ -253,7 +253,7 @@ func checkSequence(rankCounts map[Rank]int, wildCount int, length int, width int
 		if possible {
 			for r, c := range rankCounts {
 				inSeq := false
-				for i := 0; i < length; i++ {
+				for i := range length {
 					var seqR Rank
 					if start == 0 && i == 0 {
 						seqR = RankA

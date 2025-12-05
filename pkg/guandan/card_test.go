@@ -261,7 +261,7 @@ func TestRankConstants(t *testing.T) {
 		RankJ, RankQ, RankK, RankA, RankLevel, RankJokerSmall, RankJokerBig,
 	}
 
-	for i := 0; i < len(expectedOrder)-1; i++ {
+	for i := range len(expectedOrder) - 1 {
 		if expectedOrder[i] >= expectedOrder[i+1] {
 			t.Errorf("Rank order error: %v should be less than %v", expectedOrder[i], expectedOrder[i+1])
 		}

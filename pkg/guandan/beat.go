@@ -2,7 +2,6 @@ package guandan
 
 // Search 查找手牌中是否有大于 target 的牌型，返回能压制的牌 (最小的一个)
 func (handCards Cards) Search(targetPattern *Pattern, trump Rank) Cards {
-
 	// 1. 统计手牌
 	var wildCards []Card
 	cardsMap := make(map[Rank][]Card)
@@ -344,7 +343,7 @@ func searchSequence(cardsMap map[Rank][]Card, wildCards []Card, length int, widt
 		possible := true
 		var currentMainPoint uint8
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			var r Rank
 			if start == 0 && i == 0 {
 				r = RankA
@@ -488,7 +487,7 @@ func searchSequenceAll(cardsMap map[Rank][]Card, wildCards []Card, length int, w
 		possible := true
 		var currentMainPoint uint8
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			var r Rank
 			if start == 0 && i == 0 {
 				r = RankA
