@@ -216,6 +216,15 @@ func (p *PubSub) publishBatch(ctx context.Context, topic string, argsList [][]an
 	return nil
 }
 
+// MustSubscribe 订阅一个topic，发生错误时panic
+func (p *PubSub) MustSubscribe(ctx context.Context, topic string, fn any, opts ...Option) *Subscription {
+	sub, err := p.Subscribe(ctx, topic, fn, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}
+
 // Subscribe 订阅一个topic
 // fn 是处理消息的函数，其参数类型和数量必须与Publish时的args对应
 // opts 是Subscription的配置选项

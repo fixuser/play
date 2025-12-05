@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cast"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -71,6 +72,18 @@ func (m *Meta) Get(key string) (value any) {
 	}
 	value = m.data[key]
 	return
+}
+
+// GetString 获取指定 key 的字符串类型元数据
+func (m *Meta) GetString(key string) (value string) {
+	val := m.Get(key)
+	return cast.ToString(val)
+}
+
+// GetInt64 获取指定 key 的 int64 类型元数据
+func (m *Meta) GetInt64(key string) (value int64) {
+	val := m.Get(key)
+	return cast.ToInt64(val)
 }
 
 // Context 返回带有当前元数据的 context.Context

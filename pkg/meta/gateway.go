@@ -14,6 +14,7 @@ const (
 	HeaderUserAgent     = "x-meta-user-agent"
 	HeaderRequestMethod = "x-meta-request-method"
 	HeaderRequestPath   = "x-meta-request-path"
+	HeaderRequestUri    = "x-meta-request-uri"
 	HeaderRequestHost   = "x-meta-request-host"
 	HeaderToken         = "x-meta-token"
 	MetaUserId          = "x-meta-user-id"
@@ -32,9 +33,10 @@ func MetadataAnnotator(ctx context.Context, req *http.Request) (md metadata.MD) 
 	data := make(map[string]string, 15)
 
 	// 从请求头中提取元数据
-	data[HeaderUserAgent] = req.Header.Get(HeaderUserAgent)
+	data[HeaderUserAgent] = req.Header.Get("User-Agent")
 	data[HeaderRequestMethod] = req.Method
 	data[HeaderRequestPath] = req.URL.Path
+	data[HeaderRequestUri] = req.RequestURI
 	data[HeaderRequestHost] = req.Host
 
 	data[MetaLanguage] = cmp.Or(req.Header.Get(MetaLanguage), req.Header.Get("Accept-Language"))
@@ -52,6 +54,9 @@ func MetadataAnnotator(ctx context.Context, req *http.Request) (md metadata.MD) 
 
 	// 获取用户IP
 	ip := cmp.Or(req.Header.Get("Cf-Connecting-Ip"), req.Header.Get("CloudFront-Viewer-Address"), req.Header.Get("X-Real-Ip"))
+	if ip == "" {
+		ip = req.RemoteAddr
+	}
 	data[MetaUserIp], _, _ = net.SplitHostPort(ip)
 
 	// 获取用户国家

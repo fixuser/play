@@ -56,7 +56,7 @@ func (m *Manager) exitTheseExtensionsInReverse(extensionsToExit []Extension) {
 		ext := extensionsToExit[i]
 		log.Trace().Str("extension_name", ext.Name()).Msg("exiting extension")
 		ext.Exit() // 调用扩展自身的退出逻辑
-		log.Trace().Str("extension_name", ext.Name()).Msg("extension exited")
+		log.Debug().Str("extension_name", ext.Name()).Msg("extension exited")
 	}
 	log.Trace().Msg("finished exiting extensions")
 }
@@ -95,7 +95,7 @@ func (m *Manager) LoadAll() error {
 			return fmt.Errorf("failed to load extension '%s': %w", ext.Name(), err)
 		}
 		tempLoadedInThisCall = append(tempLoadedInThisCall, ext)
-		log.Trace().Str("extension_name", ext.Name()).Msg("extension loaded successfully")
+		log.Debug().Str("extension_name", ext.Name()).Msg("extension loaded successfully")
 	}
 
 	// 所有扩展都已成功加载
