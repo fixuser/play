@@ -174,11 +174,11 @@ func (gr *GameRound) Play(userId int64, pattern Pattern) error {
 	return nil
 }
 
-// PlayingCount 获取还在游戏中的玩家数量
-func (gr *GameRound) PlayingCount() int {
+// ActivePlayerCount 获取还在游戏且还有手牌的玩家数量
+func (gr *GameRound) ActivePlayerCount() int {
 	count := 0
 	for _, player := range gr.Players {
-		if player.Status == StatusPlaying {
+		if player.Status == StatusPlaying && player.HandCount() > 0 {
 			count++
 		}
 	}
@@ -186,8 +186,10 @@ func (gr *GameRound) PlayingCount() int {
 }
 
 // IsTrickFinished 判断当前轮次是否完成
-// 完成条件：本轮出牌的所有人中，除了最后一个出牌的人外，其余都过牌了
-// 注意：需要考虑玩家在本轮中途打完牌的情况
+// 完成条件：从最后一个出实牌的人开始，后续连续Pass的人数达到了限制
+// 限制取决于出牌者是否还有牌：
+// 1. 如果出牌者还有牌：需要 (ActivePlayerCount - 1) 个Pass
+// 2. 如果出牌者没牌了：需要 ActivePlayerCount 个Pass
 func (gr *GameRound) IsTrickFinished() bool {
 	if int(gr.Trick) >= len(gr.Tricks) {
 		return false
@@ -198,26 +200,36 @@ func (gr *GameRound) IsTrickFinished() bool {
 		return false
 	}
 
-	// 统计本轮参与出牌的玩家（去重）
-	participated := make(map[uint8]bool)
-	for _, t := range tricks {
-		participated[t.PlayerIndex] = true
-	}
-
-	// 统计过牌数量和非过牌数量
-	passCount := 0
-	for _, t := range tricks {
-		if t.IsPass() {
-			passCount++
+	// 1. 找到最后一个出实牌的索引
+	lastRealIndex := -1
+	for i := len(tricks) - 1; i >= 0; i-- {
+		if !tricks[i].IsPass() {
+			lastRealIndex = i
+			break
 		}
 	}
 
-	// 本轮参与的玩家数量
-	participatedCount := len(participated)
+	if lastRealIndex == -1 {
+		return false
+	}
 
-	// 如果过牌数量 >= 参与玩家数量 - 1，则本轮完成
-	// 例如：4人参与，需要3人pass；3人参与，需要2人pass
-	return passCount > 0 && passCount >= participatedCount-1
+	// 2. 统计后面的连续Pass数量
+	passCount := len(tricks) - 1 - lastRealIndex
+
+	// 3. 获取活跃玩家数量（还在玩且有牌）
+	activeCount := gr.ActivePlayerCount()
+
+	// 4. 检查出最大牌的玩家状态
+	lastPlayerIndex := tricks[lastRealIndex].PlayerIndex
+	lastPlayer := &gr.Players[lastPlayerIndex]
+
+	// 判断出牌者是否还是活跃玩家
+	lastPlayerIsActive := lastPlayer.Status == StatusPlaying && lastPlayer.HandCount() > 0
+	if lastPlayerIsActive {
+		activeCount--
+	}
+
+	return passCount >= activeCount
 }
 
 // GetTrickWinner 获取当前轮次的赢家索引
