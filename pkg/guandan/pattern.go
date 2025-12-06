@@ -1,21 +1,5 @@
 package guandan
 
-type PatternType uint8
-
-const (
-	PatternTypeNone          PatternType = iota // 单张
-	PatternTypeSingle                           // 单张
-	PatternTypePair                             // 对
-	PatternTypeTrips                            // 三同张
-	PatternTypeFullHouse                        // 三带对
-	PatternTypeTripsSeq                         // 三同连张
-	PatternTypePairSeq                          // 三连对
-	PatternTypeStraight                         // 顺子（5张）
-	PatternTypeStraightFlush                    // 同花顺（5张）
-	PatternTypeBomb                             // 炸弹（>=4张，相同点数或特殊级牌炸弹）
-	PatternTypeFourJokers                       // 四大天王
-)
-
 // 三连对、三同连张、顺子、同花顺时，可视作1
 type Pattern struct {
 	PlayerId  int8
@@ -374,6 +358,9 @@ func (p *Pattern) GetLevel() int {
 		} else {
 			return 2
 		}
+	}
+	if p.Type == PatternTypeFourJokers {
+		return 6
 	}
 	if p.Type == PatternTypeStraightFlush {
 		return 4

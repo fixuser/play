@@ -1,14 +1,5 @@
 package guandan
 
-type PlayStatus int8
-
-const (
-	StatusWaiting  PlayStatus = iota // 等待中
-	StatusReady                      // 准备好
-	StatusPlaying                    // 游戏中
-	StatusFinished                   // 已结束
-)
-
 // Player 玩家信息
 type Player struct {
 	UserId        int64      // 玩家ID
@@ -101,12 +92,4 @@ func (p *Player) PlayedCardCount() int {
 		count += len(pattern.Cards)
 	}
 	return count
-}
-
-// TeamPlayers 表示一队玩家
-type TeamPlayers [2]*Player
-
-// Ranks 表示一队玩家的排名
-func (tps *TeamPlayers) Ranks() TeamRank {
-	return TeamRank{tps[0].Rank, tps[1].Rank}
 }

@@ -5,20 +5,20 @@ import (
 )
 
 func TestNewGameRound(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 	if gr == nil {
 		t.Fatal("NewGameRound returned nil")
 	}
 	if gr.Status != GameStatusWaiting {
 		t.Errorf("expected status %v, got %v", GameStatusWaiting, gr.Status)
 	}
-	if gr.MaxTrump != RankA {
-		t.Errorf("expected MaxTrump %v, got %v", RankA, gr.MaxTrump)
+	if gr.Options.MaxTrump != RankA {
+		t.Errorf("expected MaxTrump %v, got %v", RankA, gr.Options.MaxTrump)
 	}
 }
 
 func TestGameRound_IsReady(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 没有玩家时不应该准备好
 	if gr.IsReady() {
@@ -50,7 +50,7 @@ func TestGameRound_IsReady(t *testing.T) {
 }
 
 func TestGameRound_Start(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 未准备时不能开始
 	if gr.Start() {
@@ -84,7 +84,7 @@ func TestGameRound_Start(t *testing.T) {
 }
 
 func TestGameRound_Deal(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 	gr.Deal()
 
 	// 检查每个玩家都有牌
@@ -100,7 +100,7 @@ func TestGameRound_Deal(t *testing.T) {
 }
 
 func TestGameRound_GetTeammate(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	tests := []struct {
 		playerIndex int
@@ -121,7 +121,7 @@ func TestGameRound_GetTeammate(t *testing.T) {
 }
 
 func TestGameRound_IsTeammate(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 0和2是队友，1和3是队友
 	if !gr.IsTeammate(0, 2) {
@@ -139,7 +139,7 @@ func TestGameRound_IsTeammate(t *testing.T) {
 }
 
 func TestGameRound_Check_SingleFinish(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置玩家
 	for i := range gr.Players {
@@ -170,7 +170,7 @@ func TestGameRound_Check_SingleFinish(t *testing.T) {
 }
 
 func TestGameRound_Check_TeamFinish(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置玩家
 	for i := range gr.Players {
@@ -208,7 +208,7 @@ func TestGameRound_Check_TeamFinish(t *testing.T) {
 }
 
 func TestGameRound_GetWinningTeam(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 游戏未结束
 	if gr.GetWinningTeam() != -1 {
@@ -298,7 +298,7 @@ func TestTeamRank_Score(t *testing.T) {
 }
 
 func TestGameRound_CountDouble(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 玩家0打出一个6张炸弹（>=6张炸弹计入翻倍）
 	gr.Players[0].Played = Patterns{
@@ -312,14 +312,16 @@ func TestGameRound_CountDouble(t *testing.T) {
 	}
 
 	// 统计翻倍牌型（6张及以上炸弹 或 四大天王等）
-	count := gr.CountDouble()
+	// Set PatternLevel to 2 (Count bombs >= 4 cards)
+	gr.Options.PatternLevel = 2
+	count := gr.CountPatternLevel(gr.Options.PatternLevel)
 	if count != 2 {
 		t.Errorf("expected count 2, got %d", count)
 	}
 }
 
 func TestGameRound_CalcMultiplier(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA), WithPatternLevel(2))
 
 	// 没有翻倍牌型，倍数为1
 	multiplier := gr.CalcMultiplier()
@@ -356,7 +358,7 @@ func TestGameRound_CalcMultiplier(t *testing.T) {
 }
 
 func TestGameRound_Settle(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 游戏未结束
 	err := gr.Settle(10, 100)
@@ -384,8 +386,9 @@ func TestGameRound_Settle(t *testing.T) {
 		t.Errorf("expected winning level 3 (双上), got %d", gr.Winning.WinningLevel)
 	}
 
-	// 双上积分倍率为4 (12/3)，基础积分10，所以积分变化为40
-	expectedPoint := int32(10 * 12 / 3) // 40
+	// 双上积分, TeamRank{1,2}.Score() returns 12
+	// basePoint 10 * 12 = 120
+	expectedPoint := int32(10 * 12)
 	if gr.Winning.WinningScore != expectedPoint {
 		t.Errorf("expected winning score %d, got %d", expectedPoint, gr.Winning.WinningScore)
 	}
@@ -408,7 +411,7 @@ func TestGameRound_Settle(t *testing.T) {
 }
 
 func TestGameRound_NextRound(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置初始级牌
 	gr.Trumps[0] = Rank2
@@ -479,7 +482,7 @@ func TestGameRound_NextRound(t *testing.T) {
 }
 
 func TestGameRound_GetTeamRanks(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 	gr.Players[0].Rank = 1
 	gr.Players[1].Rank = 3
 	gr.Players[2].Rank = 2
@@ -499,7 +502,7 @@ func TestGameRound_GetTeamRanks(t *testing.T) {
 }
 
 func TestGameRound_FullGame(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 初始化级牌
 	gr.Trumps[0] = Rank2
@@ -591,16 +594,16 @@ func TestTeamRank_IsClimbFailed(t *testing.T) {
 }
 
 func TestGameRound_IsClimbing(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 未设置MaxTrump和Trump，不在翻山
-	gr.MaxTrump = RankNone
+	gr.Options.MaxTrump = RankNone
 	if gr.IsClimbing() {
 		t.Error("should not be climbing when MaxTrump is RankNone")
 	}
 
 	// 设置MaxTrump但Trump不等于MaxTrump
-	gr.MaxTrump = RankA
+	gr.Options.MaxTrump = RankA
 	gr.Trump = Rank10
 	if gr.IsClimbing() {
 		t.Error("should not be climbing when Trump != MaxTrump")
@@ -614,13 +617,13 @@ func TestGameRound_IsClimbing(t *testing.T) {
 }
 
 func TestGameRound_ClimbFailed(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA
 	gr.Trumps[1] = Rank2
 	gr.Trump = RankA
-	gr.MaxTrump = RankA
+	gr.Options.MaxTrump = RankA
 
 	// 设置玩家
 	for i := range gr.Players {
@@ -665,13 +668,13 @@ func TestGameRound_ClimbFailed(t *testing.T) {
 }
 
 func TestGameRound_ClimbFailedThreeTimes(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA
 	gr.Trumps[1] = Rank2
 	gr.Trump = RankA
-	gr.MaxTrump = RankA
+	gr.Options.MaxTrump = RankA
 
 	// 模拟翻山失败3次
 	for round := 1; round <= 3; round++ {
@@ -733,13 +736,13 @@ func TestGameRound_ClimbFailedThreeTimes(t *testing.T) {
 }
 
 func TestGameRound_ClimbSuccess(t *testing.T) {
-	gr := NewGameRound(RankA)
+	gr := NewGameRound(WithMaxTrump(RankA))
 
 	// 设置初始级牌到最高（翻山状态）
 	gr.Trumps[0] = RankA
 	gr.Trumps[1] = Rank2
 	gr.Trump = RankA
-	gr.MaxTrump = RankA
+	gr.Options.MaxTrump = RankA
 
 	// 先模拟一次翻山失败
 	gr.ClimCounts[0] = 2 // 已经失败2次
@@ -795,5 +798,120 @@ func TestGameRound_ClimbSuccess(t *testing.T) {
 	// 当前级牌也应该重置为Rank2
 	if gr.Trump != Rank2 {
 		t.Errorf("current trump should reset to Rank2 after climb success, got %d", gr.Trump)
+	}
+}
+
+func TestGameRound_RotatePlayers(t *testing.T) {
+	// 开启换人选项
+	gr := NewGameRound(WithIsRotate(true))
+
+	// 设置玩家ID以便追踪
+	gr.Players[0].UserId = 100
+	gr.Players[1].UserId = 101
+	gr.Players[2].UserId = 102
+	gr.Players[3].UserId = 103
+
+	// 初始位置:
+	// Pos 0: 100
+	// Pos 1: 101
+	// Pos 2: 102
+	// Pos 3: 103
+
+	// 执行换人
+	gr.RotatePlayers()
+
+	// 预期位置 (0->1->2->0):
+	// Old Pos 0 (100) -> New Pos 1
+	// Old Pos 1 (101) -> New Pos 2
+	// Old Pos 2 (102) -> New Pos 0
+	// Old Pos 3 (103) -> New Pos 3 (unchanged)
+
+	if gr.Players[0].UserId != 102 {
+		t.Errorf("expected player at pos 0 to be 102, got %d", gr.Players[0].UserId)
+	}
+	if gr.Players[1].UserId != 100 {
+		t.Errorf("expected player at pos 1 to be 100, got %d", gr.Players[1].UserId)
+	}
+	if gr.Players[2].UserId != 101 {
+		t.Errorf("expected player at pos 2 to be 101, got %d", gr.Players[2].UserId)
+	}
+	if gr.Players[3].UserId != 103 {
+		t.Errorf("expected player at pos 3 to be 103, got %d", gr.Players[3].UserId)
+	}
+
+	// 再次换人
+	gr.RotatePlayers()
+	// Pos 0 (102) -> Pos 1
+	// Pos 1 (100) -> Pos 2
+	// Pos 2 (101) -> Pos 0
+
+	if gr.Players[0].UserId != 101 {
+		t.Errorf("expected player at pos 0 to be 101, got %d", gr.Players[0].UserId)
+	}
+	if gr.Players[1].UserId != 102 {
+		t.Errorf("expected player at pos 1 to be 102, got %d", gr.Players[1].UserId)
+	}
+	if gr.Players[2].UserId != 100 {
+		t.Errorf("expected player at pos 2 to be 100, got %d", gr.Players[2].UserId)
+	}
+
+	// 第三次换人 (回到初始)
+	gr.RotatePlayers()
+	if gr.Players[0].UserId != 100 {
+		t.Errorf("expected player at pos 0 to be 100, got %d", gr.Players[0].UserId)
+	}
+	if gr.Players[1].UserId != 101 {
+		t.Errorf("expected player at pos 1 to be 101, got %d", gr.Players[1].UserId)
+	}
+	if gr.Players[2].UserId != 102 {
+		t.Errorf("expected player at pos 2 to be 102, got %d", gr.Players[2].UserId)
+	}
+}
+
+func TestGameRound_NextRound_Rotate(t *testing.T) {
+	gr := NewGameRound(WithIsRotate(true), WithMaxTrump(RankA))
+
+	// 设置玩家
+	for i := range gr.Players {
+		gr.Players[i].UserId = int64(i + 1)
+		gr.Players[i].Status = StatusReady
+	}
+	// Pos 0: 1, Pos 1: 2, Pos 2: 3, Pos 3: 4
+
+	gr.Start()
+
+	// 模拟游戏结束
+	gr.Status = GameStatusFinished
+	// 必须要有赢家才能NextRound
+	gr.Players[0].Rank = 1
+	gr.Players[2].Rank = 2
+	gr.Players[1].Rank = 3
+	gr.Players[3].Rank = 4
+
+	// 防止Settle报错 (需要先Settle再NextRound，但NextRound不检查Settle，只检查WinningTeam)
+	// 其实NextRound内部调用GetWinningTeam，只要有Rank就行
+
+	err := gr.NextRound()
+	if err != nil {
+		t.Fatalf("NextRound failed: %v", err)
+	}
+
+	// 检查是否换人了
+	// 预期: 0->1, 1->2, 2->0
+	// Old 0(1) -> New 1
+	// Old 1(2) -> New 2
+	// Old 2(3) -> New 0
+
+	if gr.Players[0].UserId != 3 {
+		t.Errorf("expected player at 0 to be 3, got %d", gr.Players[0].UserId)
+	}
+	if gr.Players[1].UserId != 1 {
+		t.Errorf("expected player at 1 to be 1, got %d", gr.Players[1].UserId)
+	}
+	if gr.Players[2].UserId != 2 {
+		t.Errorf("expected player at 2 to be 2, got %d", gr.Players[2].UserId)
+	}
+	if gr.Players[3].UserId != 4 {
+		t.Errorf("expected player at 3 to be 4, got %d", gr.Players[3].UserId)
 	}
 }
