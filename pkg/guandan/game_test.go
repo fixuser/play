@@ -453,6 +453,36 @@ func TestGameRound_NextRound(t *testing.T) {
 		t.Errorf("expected 1 round in history, got %d", len(gr.Rounds))
 	}
 
+	// 检查上一局的玩家信息
+	lastRound := gr.Rounds[0]
+	if lastRound.Status != GameStatusFinished {
+		t.Errorf("last round status should be finished, got %d", lastRound.Status)
+	}
+
+	// 检查上一局玩家的具体状态（应该保留结算后的状态）
+	// 玩家0: 赢家, Rank 1
+	if !lastRound.Players[0].IsWinner || lastRound.Players[0].Rank != 1 {
+		t.Errorf("last round player 0 should be winner with rank 1")
+	}
+	// 玩家2: 赢家, Rank 2
+	if !lastRound.Players[2].IsWinner || lastRound.Players[2].Rank != 2 {
+		t.Errorf("last round player 2 should be winner with rank 2")
+	}
+	// 玩家1: 输家, Rank 4
+	if lastRound.Players[1].IsWinner || lastRound.Players[1].Rank != 4 {
+		t.Errorf("last round player 1 should be loser with rank 4")
+	}
+
+	// 检查积分变动记录
+	// 10 * 12 = 120
+	expectedScore := int32(120)
+	if lastRound.Players[0].PointChange != expectedScore {
+		t.Errorf("last round player 0 point change should be %d, got %d", expectedScore, lastRound.Players[0].PointChange)
+	}
+	if lastRound.Players[1].PointChange != -expectedScore {
+		t.Errorf("last round player 1 point change should be %d, got %d", -expectedScore, lastRound.Players[1].PointChange)
+	}
+
 	// 检查级牌升级（双上升3级）
 	if gr.Trumps[0] != Rank5 { // 2 + 3 = 5
 		t.Errorf("team A trump should be Rank5, got %d", gr.Trumps[0])

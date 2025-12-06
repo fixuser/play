@@ -3,7 +3,7 @@ package global
 import (
 	"sync/atomic"
 
-	"github.com/iot/simpro/pkg/extension"
+	"github.com/play/play/pkg/extension"
 )
 
 func defaultExtensionManager() *atomic.Value {

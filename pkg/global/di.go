@@ -3,7 +3,7 @@ package global
 import (
 	"sync/atomic"
 
-	"github.com/iot/simpro/pkg/di"
+	"github.com/play/play/pkg/di"
 )
 
 func defaultInjector() *atomic.Value {
