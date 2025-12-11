@@ -20,7 +20,7 @@ type GameOptions struct {
 	PatternLevel int           // 用于计算翻倍的最小牌型
 	IsRotate     bool          // 是否换人
 	MaxCount     int           // 最大局数
-	PlayTime     time.Duration // 出牌超时时间, 0不超时
+	PlayTime     time.Duration // 出牌超时时间, 0不超时, 最大time.Minute
 	IsClimbing   bool          // 是否翻山
 }
 
